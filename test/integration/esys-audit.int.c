@@ -1,19 +1,24 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI audit commands.
+/** This test is intended to test the ESYS audit commands.
  *
  * First a key for signing the audit digest is computed.
  * A audit session is started, and for the command GetCapability the
@@ -23,7 +28,7 @@
  *
  *\b Note: platform authorization needed.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_GetCapability() (M)
@@ -47,6 +52,14 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     ESYS_TR session = ESYS_TR_NONE;
     int failure_return = EXIT_FAILURE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPMS_CAPABILITY_DATA *capabilityData = NULL;
+    TPM2B_ATTEST *auditInfo = NULL;
+    TPMT_SIGNATURE *signature = NULL;
+
     /* Compute a signing key */
     TPM2B_AUTH authValuePrimary = {
         .size = 5,
@@ -54,7 +67,7 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -123,11 +136,6 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary,
                            &inPublic, &outsideInfo, &creationPCR,
@@ -156,7 +164,6 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     TPM2_CAP capability = TPM2_CAP_TPM_PROPERTIES;
     UINT32 property = TPM2_PT_LOCKOUT_COUNTER;
     UINT32 propertyCount = 1;
-    TPMS_CAPABILITY_DATA *capabilityData;
     TPMI_YES_NO moreData;
 
     r = Esys_GetCapability(esys_context,
@@ -169,8 +176,6 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     ESYS_TR privacyHandle = ESYS_TR_RH_ENDORSEMENT;
     TPM2B_DATA qualifyingData = {0};
     TPMT_SIG_SCHEME inScheme = { .scheme = TPM2_ALG_NULL };
-    TPM2B_ATTEST *auditInfo;
-    TPMT_SIGNATURE *signature;
 
     /* Test the audit commands */
     r = Esys_GetCommandAuditDigest(
@@ -192,6 +197,9 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
         failure_return = EXIT_SKIP;
         goto error;
     }
+
+    Esys_Free(auditInfo);
+    Esys_Free(signature);
 
     goto_if_error(r, "Error: GetCommandAuditDigest", error);
 
@@ -223,7 +231,7 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
         &setList,
         &clearList);
 
-    if ((r & ~TPM2_RC_N_MASK) == TPM2_RC_BAD_AUTH) {
+    if (number_rc(r) == TPM2_RC_BAD_AUTH) {
         /* Platform authorization not possible test will be skipped */
         LOG_WARNING("Platform authorization not possible.");
         failure_return =  EXIT_SKIP;
@@ -240,6 +248,13 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, session);
     goto_if_error(r, "Error during FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(capabilityData);
+    Esys_Free(auditInfo);
+    Esys_Free(signature);
     return EXIT_SUCCESS;
 
  error:
@@ -255,10 +270,17 @@ test_esys_audit(ESYS_CONTEXT * esys_context)
             LOG_ERROR("Cleanup signHandle failed.");
         }
     }
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(capabilityData);
+    Esys_Free(auditInfo);
+    Esys_Free(signature);
     return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_audit(esys_context);
 }

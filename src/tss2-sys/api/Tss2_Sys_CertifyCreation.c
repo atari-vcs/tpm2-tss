@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015 - 2017, Intel Corporation
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
@@ -102,10 +106,10 @@ TSS2_RC Tss2_Sys_CertifyCreation_Complete(
     if (rval)
         return rval;
 
-    return rval = Tss2_MU_TPMT_SIGNATURE_Unmarshal(ctx->cmdBuffer,
-                                                   ctx->maxCmdSize,
-                                                   &ctx->nextData,
-                                                   signature);
+    return Tss2_MU_TPMT_SIGNATURE_Unmarshal(ctx->cmdBuffer,
+                                            ctx->maxCmdSize,
+                                            &ctx->nextData,
+                                            signature);
 }
 
 TSS2_RC Tss2_Sys_CertifyCreation(

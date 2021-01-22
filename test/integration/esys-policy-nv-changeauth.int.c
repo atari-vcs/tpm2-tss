@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,8 +15,9 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI commands PolicyAuthValue,
+/** This test is intended to test the ESYS commands PolicyAuthValue,
  *  PolicyCommandCode, Esys_PolicyGetDigest, and NV_ChangeAuth.
  *
  * First in a trial session the policy value to ensure that the auth value
@@ -22,7 +27,7 @@
  * With a real policy session  the auth value of this NV ram space
  * will be changed.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_FlushContext() (M)
  *  - Esys_NV_ChangeAuth() (M)
  *  - Esys_NV_DefineSpace() (M)
@@ -43,6 +48,8 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR nvHandle = ESYS_TR_NONE;
     ESYS_TR policySession = ESYS_TR_NONE;
+
+    TPM2B_DIGEST *policyDigestTrial = NULL;
 
     /*
      * Firth the policy value for changing the auth value of an NV index has to be
@@ -83,7 +90,6 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
                                );
     goto_if_error(r, "Error: PolicyCommandCode", error);
 
-    TPM2B_DIGEST *policyDigestTrial;
     r = Esys_PolicyGetDigest(esys_context,
                              sessionTrial,
                              ESYS_TR_NONE,
@@ -92,6 +98,9 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
                              &policyDigestTrial
                              );
     goto_if_error(r, "Error: PolicyGetDigest", error);
+
+    r = Esys_FlushContext(esys_context, sessionTrial);
+    goto_if_error(r, "Flushing context", error);
 
     TPM2B_AUTH auth = {.size = 20,
                        .buffer={10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -114,6 +123,7 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
             .dataSize = 32,
         }
     };
+
 
     r = Esys_NV_DefineSpace(esys_context,
                             ESYS_TR_RH_OWNER,
@@ -183,12 +193,69 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
                               );
     goto_if_error(r, "Error: NV_UndefineSpace", error);
 
-    r = Esys_FlushContext(esys_context, sessionTrial);
+    r = Esys_FlushContext(esys_context, policySession);
     goto_if_error(r, "Flushing context", error);
+
+    /* Check DefineSpace with auth equal NULL */
+
+    r = Esys_NV_DefineSpace(esys_context,
+                            ESYS_TR_RH_OWNER,
+                            ESYS_TR_PASSWORD,
+                            ESYS_TR_NONE,
+                            ESYS_TR_NONE,
+                            NULL,
+                            &publicInfo,
+                            &nvHandle);
+
+    goto_if_error(r, "Error esys define nv space", error);
+
+    r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
+                              ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                              &policyNonceCaller,
+                              TPM2_SE_POLICY, &policySymmetric, TPM2_ALG_SHA1,
+                              &policySession);
+    goto_if_error(r, "Error: During initialization of policy trial session", error);
+
+
+    r = Esys_PolicyAuthValue(esys_context,
+                             policySession,
+                             ESYS_TR_NONE,
+                             ESYS_TR_NONE,
+                             ESYS_TR_NONE
+                             );
+    goto_if_error(r, "Error: PolicyAuthValue", error);
+
+    r = Esys_PolicyCommandCode(esys_context,
+                               policySession,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               TPM2_CC_NV_ChangeAuth
+                               );
+    goto_if_error(r, "Error: PolicyCommandCode", error);
+
+    r = Esys_NV_ChangeAuth(esys_context,
+                           nvHandle,
+                           policySession,
+                           ESYS_TR_NONE,
+                           ESYS_TR_NONE,
+                           NULL
+                           );
+    goto_if_error(r, "Error: NV_ChangeAuth", error);
+
+    r = Esys_NV_UndefineSpace(esys_context,
+                              ESYS_TR_RH_OWNER,
+                              nvHandle,
+                              ESYS_TR_PASSWORD,
+                              ESYS_TR_NONE,
+                              ESYS_TR_NONE
+                              );
+    goto_if_error(r, "Error: NV_UndefineSpace", error);
 
     r = Esys_FlushContext(esys_context, policySession);
     goto_if_error(r, "Flushing context", error);
 
+    Esys_Free(policyDigestTrial);
     return EXIT_SUCCESS;
 
  error:
@@ -216,10 +283,11 @@ test_esys_policy_nv_changeauth(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(policyDigestTrial);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_policy_nv_changeauth(esys_context);
 }

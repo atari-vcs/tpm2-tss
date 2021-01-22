@@ -1,10 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +14,6 @@
 #include <stdint.h>
 
 #include <tss2_esys.h>
-#include "tss2-sys/sysapi_util.h"
 
 #include "test.h"
 #include "esys_types.h"
@@ -20,8 +21,9 @@
 
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the unseal operation for the ESAPI command
+/** This test is intended to test the unseal operation for the ESYS command
  *  Unseal.
  *
  * We start by creating a primary key (Esys_CreatePrimary).
@@ -30,7 +32,7 @@
  * This key will be loaded and the unseal command (Esys_Unseal) will be used
  * to retrieve the sealed data.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_Create() (M)
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
@@ -45,7 +47,6 @@
 int
 test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
 {
-
     /*
      * 1. Create Primary
      */
@@ -53,13 +54,24 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     ESYS_TR primaryHandle = ESYS_TR_NONE;
     ESYS_TR loadedKeyHandle = ESYS_TR_NONE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_PUBLIC *outPublic2 = NULL;
+    TPM2B_PRIVATE *outPrivate2 = NULL;
+    TPM2B_CREATION_DATA *creationData2 = NULL;
+    TPM2B_DIGEST *creationHash2 = NULL;
+    TPMT_TK_CREATION *creationTicket2 = NULL;
+    TPM2B_SENSITIVE_DATA *outData = NULL;
+
     TPM2B_AUTH authValuePrimary = {
         .size = 5,
         .buffer = {1, 2, 3, 4, 5}
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                 .size = 0,
@@ -124,10 +136,6 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: TR_SetAuth", error);
 
     RSRC_NODE_T *primaryHandle_node;
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
 
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE,
@@ -157,7 +165,7 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                 .size = 0,
@@ -236,12 +244,6 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
         .count = 0,
     };
 
-    TPM2B_PUBLIC *outPublic2;
-    TPM2B_PRIVATE *outPrivate2;
-    TPM2B_CREATION_DATA *creationData2;
-    TPM2B_DIGEST *creationHash2;
-    TPMT_TK_CREATION *creationTicket2;
-
     r = Esys_Create(esys_context,
                     primaryHandle,
                     ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -277,8 +279,6 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
      * 4. Unseal key
      */
 
-    TPM2B_SENSITIVE_DATA *outData;
-
     r = Esys_Unseal(esys_context, loadedKeyHandle, ESYS_TR_PASSWORD,
         ESYS_TR_NONE, ESYS_TR_NONE, &outData);
     goto_if_error(r, "Error esys Unseal ", error);
@@ -303,6 +303,16 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, loadedKeyHandle);
     goto_if_error(r, "Error during FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
+    Esys_Free(outData);
     return EXIT_SUCCESS;
 
     error:
@@ -319,10 +329,20 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
+    Esys_Free(outData);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_unseal_password_auth(esys_context);
 }

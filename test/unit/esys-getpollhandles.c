@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG All
  * rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdarg.h>
 #include <inttypes.h>
@@ -123,6 +127,7 @@ test_GetPollHandles(void **state)
 
     assert_int_equal(count, 2);
     assert_memory_equal((void*)&handles[0], (void*)&rev[0], sizeof(rev));
+    free(handles);
 }
 
 int

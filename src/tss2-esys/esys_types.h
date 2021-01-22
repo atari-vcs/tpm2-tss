@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
@@ -23,6 +23,7 @@ typedef UINT32 IESYSC_RESOURCE_TYPE_CONSTANT;
 #define IESYSC_KEY_RSRC                1    /**< Tag for key resource */
 #define IESYSC_NV_RSRC                 2    /**< Tag for NV Ram resource */
 #define IESYSC_SESSION_RSRC            3    /**< Tag for session resources */
+#define IESYSC_DEGRADED_SESSION_RSRC   4    /**< Tag for degraded session resources */
 #define IESYSC_WITHOUT_MISC_RSRC       0    /**< Tag for other resources, e.g. PCR register, hierarchies */
 
 /** Type to indicate parameter encryption (by TPM)
@@ -56,6 +57,7 @@ typedef struct {
     TPM2B_DIGEST                             sessionKey;    /**< sessionKey used for KDFa to compute symKey */
     TPM2_SE                                 sessionType;    /**< Type of the session (HMAC, Policy) */
     TPMA_SESSION                      sessionAttributes;    /**< Flags which define the session behaviour */
+    TPMA_SESSION                  origSessionAttributes;    /**< Copy of flags which define the session behaviour */
     TPM2B_NONCE                             nonceCaller;    /**< Nonce computed by the ESAPI for every session call */
     TPM2B_NONCE                                nonceTPM;    /**< Nonce which is returned by the TPM for every session call */
     IESYSC_PARAM_ENCRYPT                        encrypt;    /**< Indicate parameter encryption by the TPM */

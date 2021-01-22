@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
@@ -137,8 +137,8 @@ TSS2_RC iesys_cryptossl_init();
 
 #define iesys_crypto_init iesys_cryptossl_init
 
-#endif /* ESYS_CRYPTO_OSSL_H */
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif /* ESYS_CRYPTO_OSSL_H */

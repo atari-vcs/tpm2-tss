@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,11 +15,12 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** Test the ESAPI commands HashSequenceStart, SequenceUpdate,
+/** Test the ESYS commands HashSequenceStart, SequenceUpdate,
  *  and EventSequenceComplete.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_EventSequenceComplete() (M)
  *  - Esys_HashSequenceStart() (M)
  *  - Esys_SequenceUpdate() (M)
@@ -36,6 +41,7 @@ test_esys_event_sequence_complete(ESYS_CONTEXT * esys_context)
 
     TPMI_ALG_HASH hashAlg = TPM2_ALG_NULL;   /**< enforce event Sequence */
     ESYS_TR sequenceHandle_handle;
+    TPML_DIGEST_VALUES *results = NULL;
 
     r = Esys_HashSequenceStart(esys_context,
                                ESYS_TR_NONE,
@@ -65,7 +71,6 @@ test_esys_event_sequence_complete(ESYS_CONTEXT * esys_context)
 
     ESYS_TR pcrHandle_handle = 16;
 
-    TPML_DIGEST_VALUES *results;
     r = Esys_EventSequenceComplete (
         esys_context,
         pcrHandle_handle,
@@ -77,13 +82,15 @@ test_esys_event_sequence_complete(ESYS_CONTEXT * esys_context)
         &results);
     goto_if_error(r, "Error: EventSequenceComplete", error);
 
+    Esys_Free(results);
     return EXIT_SUCCESS;
 
  error:
+    Esys_Free(results);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_event_sequence_complete(esys_context);
 }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
@@ -10,7 +10,7 @@
 
 typedef struct {
     UINT16 size;
-    BYTE buffer[1];
+    BYTE buffer[];
 } TPM2B;
 
 #endif /* TPM2B_H */

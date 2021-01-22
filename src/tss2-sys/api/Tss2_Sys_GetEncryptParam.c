@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015 - 2018, Intel Corporation
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
@@ -20,11 +24,13 @@ TSS2_RC Tss2_Sys_GetEncryptParam(
     if (!encryptParamSize || !encryptParamBuffer || !ctx)
         return TSS2_SYS_RC_BAD_REFERENCE;
 
+    if (ctx->encryptAllowed == 0)
+        return TSS2_SYS_RC_NO_ENCRYPT_PARAM;
+
     if (ctx->previousStage != CMD_STAGE_RECEIVE_RESPONSE)
         return TSS2_SYS_RC_BAD_SEQUENCE;
 
-    if (ctx->encryptAllowed == 0 ||
-        BE_TO_HOST_16(resp_header_from_cxt(ctx)->tag) == TPM2_ST_NO_SESSIONS)
+    if (BE_TO_HOST_16(resp_header_from_cxt(ctx)->tag) == TPM2_ST_NO_SESSIONS)
         return TSS2_SYS_RC_NO_ENCRYPT_PARAM;
 
     /* Get first parameter, interpret it as a TPM2B and return its size field

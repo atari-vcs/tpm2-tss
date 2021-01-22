@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015-2018, Intel Corporation
  *
@@ -6,6 +6,10 @@
  *
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <inttypes.h>
 
@@ -51,7 +55,7 @@ TSS2_RC Tss2_Sys_Initialize(
                   abiVersion->tssCreator, abiVersion->tssFamily,
                   abiVersion->tssLevel, abiVersion->tssVersion,
                   TSSWG_INTEROP, TSS_SAPI_FIRST_FAMILY,
-                  TSS_SAPI_FIRST_LEVEL, TSS_SAPI_FIRST_LEVEL);
+                  TSS_SAPI_FIRST_LEVEL, TSS_SAPI_FIRST_VERSION);
         return TSS2_SYS_RC_ABI_MISMATCH;
     }
 

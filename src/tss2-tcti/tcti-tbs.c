@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018 Intel Corporation
  * All rights reserved.
  */
  /* Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved. */
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -24,18 +28,18 @@
 
 /*
  * This function wraps the "up-cast" of the opaque TCTI context type to the
- * type for the TBS TCTI context. The only safe-guard we have to ensure
- * this operation is possible is the magic number for the TBS TCTI context.
- * If passed a NULL context, or the magic number check fails, this function
- * will return NULL.
+ * type for the mssim TCTI context. If passed a NULL context the function
+ * returns a NULL ptr. The function doesn't check magic number anymore
+ * It should checked by the appropriate tcti_common_checks.
  */
 TSS2_TCTI_TBS_CONTEXT*
 tcti_tbs_context_cast (TSS2_TCTI_CONTEXT *tcti_ctx)
 {
-    if (tcti_ctx != NULL && TSS2_TCTI_MAGIC (tcti_ctx) == TCTI_TBS_MAGIC) {
-        return (TSS2_TCTI_TBS_CONTEXT*)tcti_ctx;
+    if (tcti_ctx == NULL) {
+        return NULL;
     }
-    return NULL;
+
+    return (TSS2_TCTI_TBS_CONTEXT*)tcti_ctx;
 }
 
 /*
@@ -61,10 +65,7 @@ tcti_tbs_transmit (
     TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_tbs_down_cast (tcti_tbs);
     TSS2_RC rc = TSS2_RC_SUCCESS;
 
-    if (tcti_tbs == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-    rc = tcti_common_transmit_checks (tcti_common, command_buffer);
+    rc = tcti_common_transmit_checks(tcti_common, command_buffer, TCTI_TBS_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
@@ -111,13 +112,9 @@ tcti_tbs_receive (
     TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_tbs_down_cast (tcti_tbs);
     TSS2_RC rc = TSS2_RC_SUCCESS;
     TBS_RESULT tbs_rc;
-    int original_size = *response_size;
+    int original_size;
 
-    if (tcti_tbs == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-
-    rc = tcti_common_receive_checks (tcti_common, response_size);
+    rc = tcti_common_receive_checks(tcti_common, response_size, TCTI_TBS_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
@@ -139,6 +136,8 @@ tcti_tbs_receive (
         LOG_INFO("Caller provided buffer that *may* not be large enough to "
             "hold the response buffer.");
     }
+
+    original_size = *response_size;
 
     tbs_rc = Tbsip_Submit_Command (tcti_tbs->hContext,
                                    TBS_COMMAND_LOCALITY_ZERO,
@@ -210,6 +209,9 @@ tcti_tbs_cancel (
     TSS2_RC rc = TSS2_RC_SUCCESS;
     TSS2_TCTI_TBS_CONTEXT *tcti_tbs = tcti_tbs_context_cast (tctiContext);
 
+    if (tcti_tbs == NULL) {
+        return TSS2_TCTI_RC_BAD_REFERENCE;
+    }
     tbs_rc = Tbsip_Cancel_Commands (tcti_tbs->hContext);
     if (tbs_rc != TBS_SUCCESS) {
         LOG_WARNING ("Failed to cancel commands with TBS error: 0x%x", tbs_rc);

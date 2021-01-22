@@ -7,26 +7,26 @@ following sections describe them for the supported platforms.
 
 ## GNU/Linux:
 * GNU Autoconf
-* GNU Autoconf archive
+* GNU Autoconf Archive, version >= 2017.03.21
 * GNU Automake
 * GNU Libtool
 * C compiler
 * C library development libraries and header files
 * pkg-config
-* uriparser development libraries and header files
-* libgcrypt development libraries and header files
-* uthash development libraries and header files
+* doxygen
+* OpenSSL development libraries and header files
+* libcurl development libraries
 
 The following are dependencies only required when building test suites.
 * Integration test suite (see ./configure option --enable-integration):
-* OpenSSL development libraries and header files
+    - uthash development libraries and header files
+    - ps executable (usually in the procps package)
+    - ss executable (usually in the iproute2 package)
+    - tpm_server executable (from https://sourceforge.net/projects/ibmswtpm2/)
 * Unit test suite (see ./configure option --enable-unit):
-* cmocka unit test framework, version >= 1.0
-* netstat executable (usually in the net-tools package)
+    - cmocka unit test framework, version >= 1.0
 * Code coverage analysis:
-* lcov
-* autoconf-archives
-* uthash development libraries and header files
+    - lcov
 
 Most users will not need to install these dependencies.
 
@@ -37,21 +37,23 @@ $ sudo apt -y install \
   autoconf-archive \
   libcmocka0 \
   libcmocka-dev \
-  net-tools \
+  procps \
+  iproute2 \
   build-essential \
   git \
   pkg-config \
   gcc \
-  g++ \
-  m4 \
   libtool \
   automake \
-  libgcrypt20-dev \
   libssl-dev \
   uthash-dev \
-  autoconf
+  autoconf \
+  doxygen \
+  libjson-c-dev \
+  libini-config-dev \
+  libcurl-dev
 ```
-Note: In some Ubuntu versions, the lcov and autoconf-archive packages are incompatible with each other. Recommend downloading autoconf-archives directly from upstream and copy ax_code_coverage.m4.
+Note: In some Ubuntu versions, the lcov and autoconf-archive packages are incompatible with each other. It is recommended to download autoconf-archive directly from upstream and copy `ax_code_coverage.m4` and `ax_prog_doxygen.m4` to the `m4/` subdirectory of your tpm2-tss directory.
 
 ### Fedora
 
@@ -69,6 +71,7 @@ C Runtime (UCRT) version 10.0.16299.0. Building the type marshaling library
 (tss2-mu.dll) and the system API (tss2-sapi.dll) should be as simple as
 loading the tpm2-tss solution (tpm2-tss.sln) with a compatible and properly
 configured version of Visual Studio 2017 and pressing the 'build' button.
+Windows build setup requires OpenSSL >= v1.0.2 crypto library.
 
 ### References
 Visual Studio 2017 with "Clang for Windows": https://blogs.msdn.microsoft.com/vcblog/2017/03/07/use-any-c-compiler-with-visual-studio/
@@ -81,6 +84,8 @@ generates list of source files, and creates the configure script:
 ```
 $ ./bootstrap
 ```
+
+Any options specified to the bootstrap command are passed to `autoreconf(1)`.
 
 ## Configuring the Build
 Then run the configure script, which generates the makefiles:
@@ -180,7 +185,7 @@ $ docker rm temp
 
 tpm2-tss is now in your working directory and contains all the built files.
 
-To rebuild using your local changes mount your tmp2-tss directory as a volume.
+To rebuild using your local changes mount your tpm2-tss directory as a volume.
 
 ```console
 $ docker run --rm -ti -v $PWD:/tmp/tpm2-tss tpm2-tss \
@@ -198,5 +203,5 @@ $ make doxygen-doc
 ```
 
 The generated documentation will appear here:
-* doc/html HTML format (start with file doc/html/index.html)
-* doc/rtf/refman.rtf RTF format
+* doxygen-doc/html HTML format (start with file doxygen-doc/html/index.html)
+* doxygen-doc/rtf/refman.rtf RTF format

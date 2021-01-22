@@ -1,21 +1,26 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** Test the ESAPI function Esys_FieldUpgradeStart and   Esys_FieldUpgradeData. 
+/** Test the ESYS function Esys_FieldUpgradeStart and   Esys_FieldUpgradeData.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_FieldUpgradeData() (O)
  *  - Esys_FieldUpgradeStart() (O)
  *
@@ -81,6 +86,6 @@ test_esys_field_upgrade(ESYS_CONTEXT * esys_context)
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_field_upgrade(esys_context);
 }

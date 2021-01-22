@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -63,7 +67,7 @@ UINT8_marshal_buffer_null_with_offset (void **state)
     assert_int_equal (offset, 100 + sizeof (src));
 }
 /*
- * Test case passing NULL buffer and NULL offset. This 
+ * Test case passing NULL buffer and NULL offset. This
  */
 void
 UINT8_marshal_buffer_null_offset_null (void **state)

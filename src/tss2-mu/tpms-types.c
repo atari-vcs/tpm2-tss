@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2017, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <inttypes.h>
 #include <string.h>
@@ -972,6 +976,14 @@ TPMS_UNMARSHAL_2(TPMS_TAGGED_PROPERTY,
                  property, Tss2_MU_UINT32_Unmarshal,
                  value, Tss2_MU_UINT32_Unmarshal)
 
+TPMS_MARSHAL_2(TPMS_TAGGED_POLICY,
+               handle, VAL, Tss2_MU_UINT32_Marshal,
+               policyHash, ADDR, Tss2_MU_TPMT_HA_Marshal)
+
+TPMS_UNMARSHAL_2(TPMS_TAGGED_POLICY,
+                 handle, Tss2_MU_UINT32_Unmarshal,
+                 policyHash, Tss2_MU_TPMT_HA_Unmarshal)
+
 TPMS_MARSHAL_4(TPMS_CLOCK_INFO,
                clock, VAL, Tss2_MU_UINT64_Marshal,
                resetCount, VAL, Tss2_MU_UINT32_Marshal,
@@ -1291,3 +1303,11 @@ TPMS_MARSHAL_2(TPMS_AC_OUTPUT,
 TPMS_UNMARSHAL_2(TPMS_AC_OUTPUT,
                  tag, Tss2_MU_UINT32_Unmarshal,
                  data, Tss2_MU_UINT32_Unmarshal)
+
+TPMS_MARSHAL_2(TPMS_ID_OBJECT,
+               integrityHMAC, ADDR, Tss2_MU_TPM2B_DIGEST_Marshal,
+               encIdentity, ADDR, Tss2_MU_TPM2B_DIGEST_Marshal)
+
+TPMS_UNMARSHAL_2(TPMS_ID_OBJECT,
+                 integrityHMAC, Tss2_MU_TPM2B_DIGEST_Unmarshal,
+                 encIdentity, Tss2_MU_TPM2B_DIGEST_Unmarshal)

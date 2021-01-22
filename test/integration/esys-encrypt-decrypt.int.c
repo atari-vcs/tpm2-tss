@@ -1,25 +1,30 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI function Esys_EncryptDecrypt.
+/** This test is intended to test the ESYS function Esys_EncryptDecrypt.
  *
  * First a primary key is generated. This key will be uses as parent fo a
  * symmetric key, which will be used to encrypt and decrypt a tpm2b. The
  * result will be compared.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_Create() (M)
  *  - Esys_CreatePrimary() (M)
  *  - Esys_EncryptDecrypt() (O)
@@ -40,6 +45,20 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     ESYS_TR loadedKeyHandle = ESYS_TR_NONE;
     int failure_return = EXIT_FAILURE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_MAX_BUFFER *outData = NULL;
+    TPM2B_IV *ivOut = NULL;
+
+    TPM2B_PUBLIC *outPublic2 = NULL;
+    TPM2B_PRIVATE *outPrivate2 = NULL;
+    TPM2B_CREATION_DATA *creationData2 = NULL;
+    TPM2B_DIGEST *creationHash2 = NULL;
+    TPMT_TK_CREATION *creationTicket2 = NULL;
+    TPM2B_MAX_BUFFER *outData2 = NULL;
+    TPM2B_IV *ivOut2 = NULL;
 
     TPM2B_AUTH authValuePrimary = {
         .size = 5,
@@ -47,7 +66,7 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -111,11 +130,6 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE,
                            &inSensitivePrimary, &inPublic,
@@ -133,7 +147,7 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -183,12 +197,6 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
         .count = 0,
     };
 
-    TPM2B_PUBLIC *outPublic2;
-    TPM2B_PRIVATE *outPrivate2;
-    TPM2B_CREATION_DATA *creationData2;
-    TPM2B_DIGEST *creationHash2;
-    TPMT_TK_CREATION *creationTicket2;
-
     r = Esys_Create(esys_context,
                     primaryHandle,
                     ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -199,6 +207,12 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
                     &outPrivate2,
                     &outPublic2,
                     &creationData2, &creationHash2, &creationTicket2);
+
+    if (r == 0x2c2) { /*<< tpm:parameter(2):inconsistent attributes */
+        LOG_WARNING("Unsupported symmetric cipher.");
+        failure_return = EXIT_SKIP;
+        goto error;
+    }
     goto_if_error(r, "Error esys create ", error);
 
     LOG_INFO("AES key created.");
@@ -227,8 +241,6 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
         .size = 16,
         .buffer = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16}
     };
-    TPM2B_MAX_BUFFER *outData;
-    TPM2B_IV *ivOut;
 
     r = Esys_EncryptDecrypt(
         esys_context,
@@ -253,8 +265,6 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error: EncryptDecrypt", error);
 
-    TPM2B_MAX_BUFFER *outData2;
-    TPM2B_IV *ivOut2;
 
     r = Esys_EncryptDecrypt(
         esys_context,
@@ -295,6 +305,20 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, loadedKeyHandle);
     goto_if_error(r, "Error during FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outData);
+    Esys_Free(ivOut);
+
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
+    Esys_Free(outData2);
+    Esys_Free(ivOut2);
     return EXIT_SUCCESS;
 
  error:
@@ -310,10 +334,24 @@ test_esys_encrypt_decrypt(ESYS_CONTEXT * esys_context)
             LOG_ERROR("Cleanup loadedKeyHandle failed.");
         }
     }
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outData);
+    Esys_Free(ivOut);
+
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
+    Esys_Free(outData2);
+    Esys_Free(ivOut2);
     return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_encrypt_decrypt(esys_context);
 }

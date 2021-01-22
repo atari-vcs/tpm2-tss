@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015 - 2018, Intel Corporation
  * All rights reserved.
@@ -6,6 +6,7 @@
 
 #ifndef TSS2_SYSAPI_UTIL_H
 #define TSS2_SYSAPI_UTIL_H
+#include <stdbool.h>
 
 #include "tss2_tpm2_types.h"
 #include "tss2_tcti.h"
@@ -30,18 +31,13 @@ typedef struct _TPM20_Header_Out {
   UINT32 responseSize;
   UINT32 responseCode;
 } TPM20_Header_Out;
-
-typedef struct _TPM20_ErrorResponse {
-  TPM2_ST tag;
-  UINT32 responseSize;
-  UINT32 responseCode;
-} TPM20_ErrorResponse;
 #pragma pack(pop)
 
 typedef struct {
     TSS2_TCTI_CONTEXT *tctiContext;
     UINT8 *cmdBuffer;
     UINT32 maxCmdSize;
+    UINT8 cmd_header[sizeof(TPM20_Header_In)]; /* Copy of the cmd header to allow reissue */
     TPM20_Header_Out rsp_header;
 
     TPM2_CC commandCode;    /* In host endian */
@@ -63,8 +59,6 @@ typedef struct {
     /* Offset to next data in command/response buffer. */
     size_t nextData;
 } _TSS2_SYS_CONTEXT_BLOB;
-
-struct TSS2_SYS_CONTEXT;
 
 static inline _TSS2_SYS_CONTEXT_BLOB *
 syscontext_cast(TSS2_SYS_CONTEXT *ctx)
@@ -111,15 +105,10 @@ TSS2_RC CommonPreparePrologue(
     TPM2_CC commandCode);
 
 TSS2_RC CommonPrepareEpilogue(_TSS2_SYS_CONTEXT_BLOB *ctx);
-int GetNumCommandHandles(TPM2_CC commandCode);
-int GetNumResponseHandles(TPM2_CC commandCode);
-
-TSS2_SYS_CONTEXT *InitSysContext(
-    UINT16 maxCommandSize,
-    TSS2_TCTI_CONTEXT *tctiContext,
-    TSS2_ABI_VERSION *abiVersion);
-
-void TeardownSysContext(TSS2_SYS_CONTEXT **ctx);
+bool IsAlgorithmWeak(TPM2_ALG_ID algorith, TPM2_KEY_SIZE key_size);
+TSS2_RC ValidatePublicTemplate(const TPM2B_PUBLIC *pub);
+TSS2_RC ValidateNV_Public(const TPM2B_NV_PUBLIC *nv_public_info);
+TSS2_RC ValidateTPML_PCR_SELECTION(const TPML_PCR_SELECTION *pcr_selection);
 
 #ifdef __cplusplus
 }

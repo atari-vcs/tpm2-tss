@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,13 +15,14 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test Esys_CreatePrimary with hmac verification.
  *
  * The test can be executed with RSA or ECC keys. ECC will be used if
  * ECC is defined.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_StartAuthSession() (M)
@@ -37,6 +42,11 @@ test_esys_create_primary_hmac(ESYS_CONTEXT * esys_context)
     ESYS_TR session = ESYS_TR_NONE;
     TPMT_SYM_DEF symmetric = { .algorithm = TPM2_ALG_NULL };
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
     r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
                               ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
                               NULL,
@@ -46,7 +56,7 @@ test_esys_create_primary_hmac(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: During initialization of session", error);
 
     TPM2B_SENSITIVE_CREATE inSensitive = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -159,32 +169,32 @@ test_esys_create_primary_hmac(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: TR_SetAuth", error);
 
     RSRC_NODE_T *objectHandle_node;
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
 
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, session,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitive, &inPublic,
                            &outsideInfo, &creationPCR, &objectHandle,
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
-    goto_if_error(r, "Error esapi create primary", error);
+    goto_if_error(r, "Error esys create primary", error);
 
     r = esys_GetResourceObject(esys_context, objectHandle,
                                &objectHandle_node);
     goto_if_error(r, "Error Esys GetResourceObject", error);
-    LOG_INFO("Created Primary with TPM handle 0x%08x...",
-             objectHandle_node->rsrc.handle);
+    ESYS_TR tpmHandle = objectHandle_node->rsrc.handle;
+    LOG_INFO("Created Primary with TPM handle 0x%08x...", tpmHandle);
 
     r = Esys_FlushContext(esys_context, objectHandle);
     goto_if_error(r, "Error during FlushContext", error);
 
-    LOG_INFO("Done with handle 0x%08x...", objectHandle_node->rsrc.handle);
+    LOG_INFO("Done with handle 0x%08x...", tpmHandle);
 
     r = Esys_FlushContext(esys_context, session);
     goto_if_error(r, "Flushing context", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return EXIT_SUCCESS;
 
  error:
@@ -202,11 +212,14 @@ test_esys_create_primary_hmac(ESYS_CONTEXT * esys_context)
         }
     }
 
-
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_create_primary_hmac(esys_context);
 }

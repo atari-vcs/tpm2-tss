@@ -1,23 +1,29 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test Esys_Commit.
  *   based on an ECC key
  * created with Esys_CreatePrimary Esys_Commit is called with a point
  * from the primary key.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_Commit() (M)
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
@@ -25,6 +31,7 @@
  *
  * @param[in,out] esys_context The ESYS_CONTEXT.
  * @retval EXIT_FAILURE
+ * @retval EXIT_SKIP
  * @retval EXIT_SUCCESS
  */
 
@@ -34,6 +41,17 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR eccHandle = ESYS_TR_NONE;
     ESYS_TR session = ESYS_TR_NONE;
+    int failure_return = EXIT_FAILURE;
+
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
+    TPM2B_ECC_POINT *K = NULL;
+    TPM2B_ECC_POINT *L = NULL;
+    TPM2B_ECC_POINT *E = NULL;
+
     TPMT_SYM_DEF symmetric = {
         .algorithm = TPM2_ALG_AES,
         .keyBits = { .aes = 128 },
@@ -56,7 +74,7 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: During initialization of session", error);
 
     TPM2B_SENSITIVE_CREATE inSensitive = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -123,24 +141,23 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, session,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitive, &inPublic,
                            &outsideInfo, &creationPCR, &eccHandle,
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
-    goto_if_error(r, "Error esapi create primary", error);
+
+    if (base_rc(r) == (TPM2_RC_SCHEME | TPM2_RC_P | TPM2_RC_2)) {
+        LOG_WARNING("Scheme ECDAA not supported by TPM.");
+        failure_return = EXIT_SKIP;
+        goto error;
+    }
+
+    goto_if_error(r, "Error esys create primary", error);
 
     TPM2B_ECC_POINT P1 = {0};
     TPM2B_SENSITIVE_DATA s2 = {0};
     TPM2B_ECC_PARAMETER y2 = {0};
-    TPM2B_ECC_POINT *K;
-    TPM2B_ECC_POINT *L;
-    TPM2B_ECC_POINT *E;
     UINT16 counter;
     r = Esys_Commit(esys_context, eccHandle,
                     session, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -158,6 +175,13 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
 
     session = ESYS_TR_NONE;
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(K);
+    Esys_Free(L);
+    Esys_Free(E);
     return EXIT_SUCCESS;
 
  error:
@@ -175,10 +199,17 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
         }
     }
 
-    return EXIT_FAILURE;
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(K);
+    Esys_Free(L);
+    Esys_Free(E);
+    return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_commit(esys_context);
 }

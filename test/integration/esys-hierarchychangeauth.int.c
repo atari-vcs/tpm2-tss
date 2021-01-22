@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,6 +15,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test the change of an authorization value of
  *  a hierarchy.
@@ -20,7 +25,7 @@
  * Also second primary is created after a call of Esys_TR_SetAuth with
  * the new auth value.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_HierarchyChangeAuth() (M)
@@ -37,6 +42,12 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
     ESYS_TR primaryHandle = ESYS_TR_NONE;
     bool auth_changed = false;
     ESYS_TR authHandle_handle = ESYS_TR_RH_OWNER;
+
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
     TPM2B_AUTH newAuth = {
         .size = 5,
         .buffer = {1, 2, 3, 4, 5}
@@ -58,7 +69,7 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
     auth_changed = true;
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -115,11 +126,6 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary, &inPublic,
                            &outsideInfo, &creationPCR, &primaryHandle,
@@ -134,6 +140,13 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
 
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &newAuth);
     goto_if_error(r, "Error SetAuth", error);
+
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+
+    /* Check whether HierarchyChangeAuth with auth equal NULL works */
 
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary, &inPublic,
@@ -150,9 +163,13 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
                                  ESYS_TR_PASSWORD,
                                  ESYS_TR_NONE,
                                  ESYS_TR_NONE,
-                                 &emptyAuth);
+                                 NULL);
     goto_if_error(r, "Error: HierarchyChangeAuth", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return EXIT_SUCCESS;
 
 error:
@@ -177,10 +194,14 @@ error:
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_hierarchychangeauth(esys_context);
 }

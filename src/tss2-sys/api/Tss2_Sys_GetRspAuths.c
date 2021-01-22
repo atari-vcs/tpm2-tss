@@ -1,14 +1,19 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include "util/tss2_endian.h"
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
 #include "sysapi_util.h"
+#include <string.h>
 
 TSS2_RC Tss2_Sys_GetRspAuths(
     TSS2_SYS_CONTEXT *sysContext,
@@ -17,7 +22,8 @@ TSS2_RC Tss2_Sys_GetRspAuths(
     _TSS2_SYS_CONTEXT_BLOB *ctx = syscontext_cast(sysContext);
     TSS2_RC rval = TSS2_RC_SUCCESS;
     size_t offset = 0, offset_tmp;
-    int i = 0;
+    unsigned i = 0;
+    UINT32 rspParamsSize;
 
     if (!ctx || !rspAuthsArray)
         return TSS2_SYS_RC_BAD_REFERENCE;
@@ -32,7 +38,8 @@ TSS2_RC Tss2_Sys_GetRspAuths(
 
     offset += sizeof(TPM20_Header_Out);
     offset += ctx->numResponseHandles * sizeof(TPM2_HANDLE);
-    offset += BE_TO_HOST_32(*ctx->rspParamsSize);
+    memcpy(&rspParamsSize, ctx->rspParamsSize, sizeof(rspParamsSize));
+    offset += BE_TO_HOST_32(rspParamsSize);
     offset += sizeof(UINT32);
     offset_tmp = offset;
 
@@ -42,8 +49,10 @@ TSS2_RC Tss2_Sys_GetRspAuths(
         if (offset_tmp > ctx->rsp_header.responseSize)
             return TSS2_SYS_RC_MALFORMED_RESPONSE;
 
-        offset_tmp += sizeof(UINT16) +
-            BE_TO_HOST_16(*(UINT16 *)(ctx->cmdBuffer + offset_tmp));
+        UINT16 tmp;
+        memcpy(&tmp, ctx->cmdBuffer + offset_tmp, sizeof(UINT16));
+        offset_tmp += sizeof(UINT16);
+        offset_tmp += BE_TO_HOST_16(tmp);
 
         if (offset_tmp > ctx->rsp_header.responseSize)
             return TSS2_SYS_RC_MALFORMED_RESPONSE;
@@ -53,8 +62,9 @@ TSS2_RC Tss2_Sys_GetRspAuths(
         if (offset_tmp > ctx->rsp_header.responseSize)
             return TSS2_SYS_RC_MALFORMED_RESPONSE;
 
-        offset_tmp += sizeof(UINT16) +
-            BE_TO_HOST_16(*(UINT16 *)(ctx->cmdBuffer + offset_tmp));
+        memcpy(&tmp, ctx->cmdBuffer + offset_tmp, sizeof(UINT16));
+        offset_tmp += sizeof(UINT16);
+        offset_tmp += BE_TO_HOST_16(tmp);
 
         if (offset_tmp > ctx->rsp_header.responseSize)
             return TSS2_SYS_RC_MALFORMED_RESPONSE;

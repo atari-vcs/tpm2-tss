@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2017, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <inttypes.h>
 #include <string.h>
@@ -40,7 +44,7 @@ Tss2_MU_##type##_Marshal ( \
     } else if (buffer_size < local_offset || \
                buffer_size - local_offset < sizeof (src)) \
     { \
-        LOG_WARNING(\
+        LOG_DEBUG( \
              "buffer_size: %zu with offset: %zu are insufficient for object " \
              "of size %zu", \
              buffer_size, \
@@ -102,7 +106,7 @@ Tss2_MU_##type##_Unmarshal ( \
     if (buffer_size < local_offset || \
         sizeof (*dest) > buffer_size - local_offset) \
     { \
-        LOG_WARNING(\
+        LOG_DEBUG( \
              "buffer_size: %zu with offset: %zu are insufficient for object " \
              "of size %zu", buffer_size, local_offset, sizeof (*dest)); \
         return TSS2_MU_RC_INSUFFICIENT_BUFFER; \
@@ -176,6 +180,8 @@ BASE_MARSHAL  (TPM2_ST)
 BASE_UNMARSHAL(TPM2_ST)
 BASE_MARSHAL  (TPM2_SE)
 BASE_UNMARSHAL(TPM2_SE)
+BASE_MARSHAL  (TPM2_NT)
+BASE_UNMARSHAL(TPM2_NT)
 BASE_MARSHAL  (TPM2_HANDLE)
 BASE_UNMARSHAL(TPM2_HANDLE)
 BASE_MARSHAL  (TPMI_ALG_HASH)

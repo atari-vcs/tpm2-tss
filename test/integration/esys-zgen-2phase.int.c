@@ -1,24 +1,29 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test Esys_ECDH_ZGen.
- * 
+ *
  * The test is based on an ECC key created with Esys_CreatePrimary
  * and data produced by the command Esys_EC_Ephemeral.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_ECDH_ZGen() (M)
  *  - Esys_EC_Ephemeral() (F)
@@ -51,6 +56,14 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
     };
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_ECC_POINT *outZ1 = NULL;
+    TPM2B_ECC_POINT *outZ2 = NULL;
+    TPM2B_ECC_POINT *Q = NULL;
+
     memset(&sessionAttributes, 0, sizeof sessionAttributes);
 
     r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -61,7 +74,7 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: During initialization of session", error);
 
     TPM2B_SENSITIVE_CREATE inSensitive = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -128,20 +141,14 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, session,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitive, &inPublic,
                            &outsideInfo, &creationPCR, &eccHandle,
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
-    goto_if_error(r, "Error esapi create primary", error);
+    goto_if_error(r, "Error esys create primary", error);
 
     TPMI_ECC_CURVE curveID = TPM2_ECC_NIST_P256;
-    TPM2B_ECC_POINT *Q;
     UINT16 counter;
 
     r = Esys_EC_Ephemeral(
@@ -167,10 +174,8 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
         .size = 0,
         .point = outPublic->publicArea.unique.ecc
     };
-    TPM2B_ECC_POINT inQeB = *Q;
     TPMI_ECC_KEY_EXCHANGE inScheme = TPM2_ALG_ECDH;
-    TPM2B_ECC_POINT *outZ1;
-    TPM2B_ECC_POINT *outZ2;
+    TPM2B_ECC_POINT inQeB = *Q;
 
     r = Esys_ZGen_2Phase(
         esys_context,
@@ -201,6 +206,13 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, session);
     goto_if_error(r, "Flushing context", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outZ1);
+    Esys_Free(outZ2);
+    Esys_Free(Q);
     return EXIT_SUCCESS;
 
  error:
@@ -218,10 +230,17 @@ test_esys_zgen_2phase(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outZ1);
+    Esys_Free(outZ2);
+    Esys_Free(Q);
     return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_zgen_2phase(esys_context);
 }

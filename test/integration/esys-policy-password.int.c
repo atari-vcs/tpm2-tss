@@ -1,19 +1,24 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI command PolicyPassword.
+/** This test is intended to test the ESYS command PolicyPassword.
  *
  * First in a trial session the policy value to ensure that auth value
  * is included in the policy session used for authorization is
@@ -22,7 +27,7 @@
  * policy value and a certain authorization. Than a second key it created
  * with a PoliyPassword policy session.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_Create() (M)
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
@@ -41,6 +46,19 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR primaryHandle = ESYS_TR_NONE;
     ESYS_TR policySession = ESYS_TR_NONE;
+
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
+    TPM2B_DIGEST *policyDigestTrial = NULL;
+
+    TPM2B_PUBLIC *outPublic2 = NULL;
+    TPM2B_PRIVATE *outPrivate2 = NULL;
+    TPM2B_CREATION_DATA *creationData2 = NULL;
+    TPM2B_DIGEST *creationHash2 = NULL;
+    TPMT_TK_CREATION *creationTicket2 = NULL;
 
     /*
      * Firth the policy value for changing the auth value of an NV index has to be
@@ -74,7 +92,6 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
         );
     goto_if_error(r, "Error: PolicyPassword", error);
 
-    TPM2B_DIGEST *policyDigestTrial;
     r = Esys_PolicyGetDigest(
         esys_context,
         sessionTrial,
@@ -121,7 +138,7 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -152,11 +169,6 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
 
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
-
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
 
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary, &inPublic,
@@ -199,7 +211,7 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = authKey2,
             .data = {
@@ -255,12 +267,6 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
         .count = 0,
     };
 
-    TPM2B_PUBLIC *outPublic2;
-    TPM2B_PRIVATE *outPrivate2;
-    TPM2B_CREATION_DATA *creationData2;
-    TPM2B_DIGEST *creationHash2;
-    TPMT_TK_CREATION *creationTicket2;
-
     r = Esys_Create(esys_context,
                     primaryHandle,
                     policySession, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -279,6 +285,21 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, sessionTrial);
     goto_if_error(r, "Flushing context", error);
 
+    r = Esys_FlushContext(esys_context, policySession);
+    goto_if_error(r, "Flushing context", error);
+
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+
+    Esys_Free(policyDigestTrial);
+
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
     return EXIT_SUCCESS;
 
  error:
@@ -295,10 +316,22 @@ test_esys_policy_password(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+
+    Esys_Free(policyDigestTrial);
+
+    Esys_Free(outPublic2);
+    Esys_Free(outPrivate2);
+    Esys_Free(creationData2);
+    Esys_Free(creationHash2);
+    Esys_Free(creationTicket2);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_policy_password(esys_context);
 }
