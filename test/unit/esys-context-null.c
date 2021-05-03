@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +15,7 @@
 #include <stdint.h>
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 #include "tss2-sys/sysapi_util.h"
 #include <tss2_esys.h>
 #include "esys_types.h"
@@ -21,7 +26,7 @@
 
 /**
  * This unit test checks whether all  Esys_<cmd>() functions (one call, async,
- * and finish check the NULL pointer ESAPI context.
+ * and finish check the NULL pointer ESYS context.
  */
 
 void

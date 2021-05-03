@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
@@ -60,8 +60,6 @@ typedef uint32_t ESYS_TR;
 
 #define ESYS_TR_RH_AUTH_FIRST  0x110U
 #define ESYS_TR_RH_AUTH(x) (ESYS_TR_RH_AUTH_FIRST + (ESYS_TR)(x))
-
-#define ESYS_TR_MIN_OBJECT 0x1000U
 
 typedef struct ESYS_CONTEXT ESYS_CONTEXT;
 
@@ -166,6 +164,18 @@ Esys_TRSess_GetNonceTPM(
     ESYS_CONTEXT *esysContext,
     ESYS_TR session,
     TPM2B_NONCE **nonceTPM);
+
+TSS2_RC
+Esys_TR_GetTpmHandle(
+    ESYS_CONTEXT *esys_context,
+    ESYS_TR esys_handle,
+    TPM2_HANDLE *tpm_handle);
+
+TSS2_RC
+Esys_TRSess_GetAuthRequired(
+    ESYS_CONTEXT *esys_context,
+    ESYS_TR esys_handle,
+    TPMI_YES_NO *auth_needed);
 
 /* Table 5 - TPM2_Startup Command */
 
@@ -409,7 +419,7 @@ Esys_LoadExternal(
     ESYS_TR shandle3,
     const TPM2B_SENSITIVE *inPrivate,
     const TPM2B_PUBLIC *inPublic,
-    TPMI_RH_HIERARCHY hierarchy,
+    ESYS_TR hierarchy,
     ESYS_TR *objectHandle);
 
 TSS2_RC
@@ -420,7 +430,7 @@ Esys_LoadExternal_Async(
     ESYS_TR shandle3,
     const TPM2B_SENSITIVE *inPrivate,
     const TPM2B_PUBLIC *inPublic,
-    TPMI_RH_HIERARCHY hierarchy);
+    ESYS_TR hierarchy);
 
 TSS2_RC
 Esys_LoadExternal_Finish(
@@ -949,7 +959,7 @@ Esys_Hash(
     ESYS_TR shandle3,
     const TPM2B_MAX_BUFFER *data,
     TPMI_ALG_HASH hashAlg,
-    TPMI_RH_HIERARCHY hierarchy,
+    ESYS_TR hierarchy,
     TPM2B_DIGEST **outHash,
     TPMT_TK_HASHCHECK **validation);
 
@@ -961,7 +971,7 @@ Esys_Hash_Async(
     ESYS_TR shandle3,
     const TPM2B_MAX_BUFFER *data,
     TPMI_ALG_HASH hashAlg,
-    TPMI_RH_HIERARCHY hierarchy);
+    ESYS_TR hierarchy);
 
 TSS2_RC
 Esys_Hash_Finish(
@@ -1131,7 +1141,7 @@ Esys_SequenceComplete(
     ESYS_TR shandle2,
     ESYS_TR shandle3,
     const TPM2B_MAX_BUFFER *buffer,
-    TPMI_RH_HIERARCHY hierarchy,
+    ESYS_TR hierarchy,
     TPM2B_DIGEST **result,
     TPMT_TK_HASHCHECK **validation);
 
@@ -1143,7 +1153,7 @@ Esys_SequenceComplete_Async(
     ESYS_TR shandle2,
     ESYS_TR shandle3,
     const TPM2B_MAX_BUFFER *buffer,
-    TPMI_RH_HIERARCHY hierarchy);
+    ESYS_TR hierarchy);
 
 TSS2_RC
 Esys_SequenceComplete_Finish(
@@ -2292,7 +2302,7 @@ Esys_HierarchyControl(
     ESYS_TR shandle1,
     ESYS_TR shandle2,
     ESYS_TR shandle3,
-    TPMI_RH_ENABLES enable,
+    ESYS_TR enable,
     TPMI_YES_NO state);
 
 TSS2_RC
@@ -2302,7 +2312,7 @@ Esys_HierarchyControl_Async(
     ESYS_TR shandle1,
     ESYS_TR shandle2,
     ESYS_TR shandle3,
-    TPMI_RH_ENABLES enable,
+    ESYS_TR enable,
     TPMI_YES_NO state);
 
 TSS2_RC
@@ -3227,6 +3237,11 @@ Esys_Vendor_TCG_Test_Finish(
 void
 Esys_Free(
     void *__ptr);
+
+TSS2_RC
+Esys_GetSysContext(
+    ESYS_CONTEXT *esys_context,
+    TSS2_SYS_CONTEXT **sys_context);
 
 #ifdef __cplusplus
 }

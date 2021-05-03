@@ -1,45 +1,55 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** Test the ESAPI function Esys_HierarchyControl.
+/** Test the ESYS function Esys_HierarchyControl.
  *
  * The owner hierarchy will be disabled and with Esys_CreatePrimary it will
  * be checked whether the owner hierarchy is disabled.
  *
  *\b Note: platform authorization needed.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_HierarchyControl() (M)
  *
  * @param[in,out] esys_context The ESYS_CONTEXT.
+ * @param[in] enable The hierarchy to enable or disable.
  * @retval EXIT_FAILURE
  * @retval EXIT_SKIP
  * @retval EXIT_SUCCESS
  */
 int
-test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
+test_esys_hierarchy_control(ESYS_CONTEXT * esys_context, ESYS_TR enable)
 {
     TSS2_RC r;
 
     ESYS_TR authHandle_handle = ESYS_TR_RH_PLATFORM;
-    TPMI_RH_ENABLES enable = TPM2_RH_OWNER;
     TPMI_YES_NO state = TPM2_NO;
     ESYS_TR primaryHandle = ESYS_TR_NONE;
     int failure_return = EXIT_FAILURE;
+
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
 
     r = Esys_HierarchyControl(
         esys_context,
@@ -50,7 +60,7 @@ test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
         enable,
         state);
 
-    if ((r & ~TPM2_RC_N_MASK) == TPM2_RC_BAD_AUTH) {
+    if (number_rc(r) == TPM2_RC_BAD_AUTH) {
         /* Platform authorization not possible test will be skipped */
         LOG_WARNING("Platform authorization not possible.");
         return EXIT_SKIP;
@@ -59,7 +69,7 @@ test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: HierarchyControl", error);
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -116,11 +126,6 @@ test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary, &inPublic,
                            &outsideInfo, &creationPCR, &primaryHandle,
@@ -151,6 +156,10 @@ test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, primaryHandle);
     goto_if_error(r, "Error: FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return EXIT_SUCCESS;
 
  error:
@@ -161,10 +170,22 @@ test_esys_hierarchy_control(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
     return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
-    return test_esys_hierarchy_control(esys_context);
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
+    int rc = test_esys_hierarchy_control(esys_context, ESYS_TR_RH_OWNER);
+    if (rc)
+        return rc;
+
+    /*
+     * Test that backwards compat API change is still working, see:
+     *   - https://github.com/tpm2-software/tpm2-tss/issues/1750
+     */
+    return test_esys_hierarchy_control(esys_context, TPM2_RH_OWNER);
 }

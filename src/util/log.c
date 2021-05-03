@@ -1,3 +1,7 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -25,8 +29,7 @@
  * _strncasecmp_. Since tpm2-tss is supposed to be compatible
  * with ISO C99 and not with POSIX, _strncasecmp_ had to be
  * replaced. This function creates lowercase representations
- * of the strings to compare and calls the function _strncmp_
- * on them.
+ * of the strings and compares them bytewise.
  *
  * @param string1 The first of the two strings to compare
  * @param string2 The second of the two strings to compare
@@ -51,27 +54,24 @@ case_insensitive_strncmp(const char *string1,
     if ((string1 != NULL) && (string2 == NULL)) {
         return 1;
     }
+    if (n == 0) { // Zero bytes are always equal
+        return 0;
+    }
+    if (string1 == string2) { // return equal if they point to same location
+        return 0;
+    }
 
-    size_t string1_size = strlen (string1);
-    size_t string2_size = strlen (string2);
-    unsigned char lower_string1 [string1_size + 1];
-    unsigned char lower_string2 [string2_size + 1];
-    size_t i;
-
-    for (i = 0; i < string1_size; i++)
-        lower_string1[i] = tolower(string1[i]);
-
-    lower_string1[i] = '\0';
-
-    for (i = 0; i < string2_size; i++)
-        lower_string2[i] = tolower(string2[i]);
-
-    lower_string2[i] = '\0';
-
-    return memcmp (lower_string1, lower_string2, n);
+    int result;
+    do {
+        result = tolower((unsigned char) *string1) - tolower((unsigned char) *string2);
+        if (result != 0) {
+                break;
+        }
+    } while (*string1++ != '\0' && *string2++ != '\0' && --n );
+    return result;
 }
 
-log_level
+static log_level
 getLogLevel(const char *module, log_level logdefault);
 
 void
@@ -82,23 +82,8 @@ doLogBlob(log_level loglevel, const char *module, log_level logdefault,
 {
     if (unlikely(*status == LOGLEVEL_UNDEFINED))
         *status = getLogLevel(module, logdefault);
-
     if (loglevel > *status)
         return;
-
-    size_t width = 8;
-    size_t buffer_size = (size * 2) + (size / width) * 2 + 1;
-    char buffer[buffer_size];
-    buffer[0] = '\0';
-    for (size_t i = 0, off = 0; i < size && off < buffer_size; i++, off+=2) {
-        if (width < buffer_size && i % width == 0) {
-            *(&buffer[0] + off) = '\n';
-            off += 1;
-            *(&buffer[0] + off) = '\t';
-            off += 1;
-        }
-        sprintf(&buffer[0] + off, "%02x", blob[i]);
-    }
 
     va_list vaargs;
     va_start(vaargs, fmt);
@@ -112,7 +97,54 @@ doLogBlob(log_level loglevel, const char *module, log_level logdefault,
     va_end(vaargs);
 
     doLog(loglevel, module, logdefault, status, file, func, line,
-          "%s (size=%zi): %s", msg, size, buffer);
+          "%s (size=%zi):", msg, size);
+
+    unsigned int i, y, x, off, off2;
+    unsigned int width = 16;
+#define LINE_LEN 64
+    char buffer[LINE_LEN];
+
+    for (i = 1, off = 0, off2 = 0; i <= size; i++) {
+        if (i == 1) {
+            sprintf(&buffer[off], "%04x: ", i - 1);
+            off += 6;
+        }
+
+        /* data output */
+        sprintf(&buffer[off], "%02x", blob[i-1]);
+        off += 2;
+
+        /* ASCII output */
+        if ((i % width == 0 && i > 1) || i == size) {
+            sprintf(&buffer[off], "  ");
+            off += 2;
+            /* Align to the right */
+            for (x = off; x < width * 2 + 8; x++) {
+                sprintf(&buffer[off], " ");
+                off++;
+            }
+
+            /* Account for a line that is not 'full' */
+            unsigned int less = width - (i % width);
+            if (less == width)
+                less = 0;
+
+            for (y = 0; y < width - less; y++) {
+                if (isgraph(blob[off2 + y])) {
+                    sprintf(&buffer[y + off], "%c", blob[off2 + y]);
+                } else {
+                    sprintf(&buffer[y + off], "%c", '.');
+                }
+            }
+            /* print the line and restart */
+            fprintf (stderr, "%s\n", buffer);
+            off2 = i;
+            off = 0;
+            memset(buffer, '\0', LINE_LEN);
+            sprintf(&buffer[off], "%04x: ", i);
+            off += 6;
+        }
+    }
 }
 
 void
@@ -141,10 +173,11 @@ doLog(log_level loglevel, const char *module, log_level logdefault,
     va_end(vaargs);
 }
 
-log_level
+static log_level
 log_stringlevel(const char *n)
 {
-    for(log_level i = 0; i < sizeof(log_strings)/sizeof(log_strings[0]); i++) {
+    log_level i;
+    for(i = 0; i < sizeof(log_strings)/sizeof(log_strings[0]); i++) {
         if (case_insensitive_strncmp(log_strings[i], n, strlen(log_strings[i])) == 0) {
             return i;
         }
@@ -152,12 +185,12 @@ log_stringlevel(const char *n)
     return LOGLEVEL_UNDEFINED;
 }
 
-log_level
+static log_level
 getLogLevel(const char *module, log_level logdefault)
 {
     log_level loglevel = logdefault;
-    char *envlevel = getenv("TSS2_LOG");
-    char *i = envlevel;
+    const char *envlevel = getenv("TSS2_LOG");
+    const char *i = envlevel;
     if (envlevel == NULL)
         return loglevel;
     while ((i = strchr(i, '+')) != NULL) {
@@ -173,4 +206,3 @@ getLogLevel(const char *module, log_level logdefault)
     }
     return loglevel;
 }
-

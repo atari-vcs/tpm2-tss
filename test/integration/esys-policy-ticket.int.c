@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -10,16 +14,17 @@
 #include "tss2_mu.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI policy commands related to
+/** This test is intended to test the ESYS policy commands related to
  *  signed authorization actions.
  *
  * Esys_PolicySigned, Esys_PolicyTicket, and Esys_PolicySecret.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_HashSequenceStart() (M)
@@ -46,6 +51,20 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
     ESYS_TR sessionTrial = ESYS_TR_NONE;
     int failure_return = EXIT_FAILURE;
 
+    TPM2B_NONCE *nonceTPM = NULL;
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_NAME *nameKeySign = NULL;
+    TPM2B_NAME *keyQualifiedName = NULL;
+    TPM2B_DIGEST *signed_digest = NULL;
+    TPM2B_TIMEOUT *timeout = NULL;
+    TPMT_TK_AUTH *policySignedTicket = NULL;
+    TPMT_TK_HASHCHECK *validation = NULL;
+    TPMT_TK_AUTH *policySecretTicket = NULL;
+    TPMT_SIGNATURE *signature = NULL;
+
     /*
      * 1. Create Primary. This primary will be used as signing key.
      */
@@ -56,7 +75,7 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = authValuePrimary,
             .data = {
@@ -118,11 +137,6 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE,
                            &inSensitivePrimary, &inPublic,
@@ -130,9 +144,10 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
     goto_if_error(r, "Error esys create primary", error);
-
-    TPM2B_NAME *nameKeySign;
-    TPM2B_NAME *keyQualifiedName;
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
 
     r = Esys_ReadPublic(esys_context,
                         primaryHandle,
@@ -149,7 +164,6 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
      *    ticket policySignedTicket will be created.
      *    With this ticket the function Esys_PolicyTicket will be tested.
      */
-    TPM2B_DIGEST *signed_digest;
     INT32 expiration = -(10*365*24*60*60); /* Expiration ten years */
 
     TPM2B_DIGEST expiration2b;
@@ -178,10 +192,7 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: During initialization of policy trial session", error);
 
     TPM2B_NONCE policyRef = {0};
-    TPM2B_NONCE *nonceTPM;
     TPM2B_DIGEST cpHashA = {0};
-    TPM2B_TIMEOUT *timeout;
-    TPMT_TK_AUTH *policySignedTicket;
 
     r = Esys_TRSess_GetNonceTPM(esys_context, session, &nonceTPM);
     goto_if_error(r, "Error: During initialization of policy trial session", error);
@@ -214,15 +225,13 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
                             );
     goto_if_error(r, "Error: SequenceUpdate", error);
 
-    TPMT_TK_HASHCHECK *validation;
-
     r = Esys_SequenceComplete(esys_context,
                               sequenceHandle_handle,
                               ESYS_TR_PASSWORD,
                               ESYS_TR_NONE,
                               ESYS_TR_NONE,
                               (const TPM2B_MAX_BUFFER *)&expiration2b,
-                              TPM2_RH_OWNER,
+                              ESYS_TR_RH_OWNER,
                               &signed_digest,
                               &validation
                               );
@@ -234,7 +243,6 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
         .hierarchy = TPM2_RH_OWNER,
         .digest = {0}
     };
-    TPMT_SIGNATURE *signature;
 
     /* Policy expiration of ten years will be signed */
 
@@ -304,6 +312,7 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
 
         session = ESYS_TR_NONE;
     }
+    Esys_Free(timeout);
 
     /*
      * 3. A policy tial session will be created. With this trial policy the
@@ -326,8 +335,6 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
                               TPM2_SE_TRIAL, &symmetricTrial, TPM2_ALG_SHA1,
                               &sessionTrial);
     goto_if_error(r, "Error: During initialization of policy trial session", error);
-
-    TPMT_TK_AUTH *policySecretTicket;
 
     r = Esys_PolicySecret(
         esys_context,
@@ -352,6 +359,16 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, primaryHandle);
     goto_if_error(r, "Error: FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(nameKeySign);
+    Esys_Free(keyQualifiedName);
+    Esys_Free(signed_digest);
+    Esys_Free(timeout);
+    Esys_Free(policySignedTicket);
+    Esys_Free(validation);
+    Esys_Free(policySecretTicket);
+    Esys_Free(nonceTPM);
+    Esys_Free(signature);
     return EXIT_SUCCESS;
 
  error:
@@ -374,10 +391,24 @@ test_esys_policy_ticket(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(nameKeySign);
+    Esys_Free(keyQualifiedName);
+    Esys_Free(signed_digest);
+    Esys_Free(timeout);
+    Esys_Free(policySignedTicket);
+    Esys_Free(validation);
+    Esys_Free(policySecretTicket);
+    Esys_Free(nonceTPM);
+    Esys_Free(signature);
+
     return failure_return;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_policy_ticket(esys_context);
 }

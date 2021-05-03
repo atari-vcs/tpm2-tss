@@ -1,10 +1,15 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,6 +39,21 @@ static uint8_t tpm2_buf [BUF_SIZE] = {
     0xca, 0xfe, 0xba, 0xbe,
     0xfe, 0xef
 };
+int
+__real_open(const char *pathname, int flags, ...);
+/* wrap function for open required to test init */
+int
+__wrap_open(const char *pathname, int flags, ...)
+{
+    const char* pathname_prefix_dev = "/dev";
+    if (strncmp(pathname, pathname_prefix_dev, strlen(pathname_prefix_dev)) == 0) {
+        return mock_type (int);
+    } else {
+        /* only mock opening of device files as the open() syscall is needed
+           for code coverage reports as well */
+        return __real_open(pathname, flags);
+    }
+}
 /**
  * When passed all NULL values ensure that we get back the expected RC
  * indicating bad values.
@@ -59,6 +79,73 @@ tcti_device_init_size_test (void **state)
     ret = Tss2_Tcti_Device_Init (NULL, &tcti_size, NULL);
     assert_int_equal (ret, TSS2_RC_SUCCESS);
 }
+/* Test the failure of opening a specified device file */
+static void
+tcti_device_init_conf_fail (void **state)
+{
+    size_t tcti_size = 0;
+    TSS2_RC ret = TSS2_RC_SUCCESS;
+    TSS2_TCTI_CONTEXT *ctx = NULL;
+
+    ret = Tss2_Tcti_Device_Init (NULL, &tcti_size, NULL);
+    assert_true (ret == TSS2_RC_SUCCESS);
+    ctx = calloc (1, tcti_size);
+    assert_non_null (ctx);
+    errno = ENOENT; /* No such file or directory */
+    will_return (__wrap_open, -1);
+    ret = Tss2_Tcti_Device_Init (ctx, &tcti_size, "/dev/nonexistent");
+    assert_true (ret == TSS2_TCTI_RC_IO_ERROR);
+
+    free(ctx);
+}
+/* Test the device file recognition if no config string was specified */
+static void
+tcti_device_init_conf_default_fail (void **state)
+{
+    size_t tcti_size = 0;
+    TSS2_RC ret = TSS2_RC_SUCCESS;
+    TSS2_TCTI_CONTEXT *ctx = NULL;
+
+    ret = Tss2_Tcti_Device_Init (NULL, &tcti_size, NULL);
+    assert_true (ret == TSS2_RC_SUCCESS);
+    ctx = calloc (1, tcti_size);
+    assert_non_null (ctx);
+    errno = EACCES; /* Permission denied */
+    will_return (__wrap_open, -1);
+    will_return (__wrap_open, -1);
+    ret = Tss2_Tcti_Device_Init (ctx, &tcti_size, NULL);
+    assert_true (ret == TSS2_TCTI_RC_IO_ERROR);
+
+    free(ctx);
+}
+
+/* Test the device file recognition if no config string was specified */
+static void
+tcti_device_init_conf_default_success (void **state)
+{
+    size_t tcti_size = 0;
+    TSS2_RC ret = TSS2_RC_SUCCESS;
+    TSS2_TCTI_CONTEXT *ctx = NULL;
+
+    ret = Tss2_Tcti_Device_Init (NULL, &tcti_size, NULL);
+    assert_true (ret == TSS2_RC_SUCCESS);
+    ctx = calloc (1, tcti_size);
+    assert_non_null (ctx);
+    will_return (__wrap_open, 3);
+    will_return (__wrap_write, 12);
+    will_return (__wrap_write, tpm2_buf);
+    will_return (__wrap_poll, 1);
+    will_return (__wrap_read, 10);
+    will_return (__wrap_read, tpm2_buf);
+    will_return (__wrap_poll, 1);
+    will_return (__wrap_read, 8);
+    will_return (__wrap_read, tpm2_buf);
+    ret = Tss2_Tcti_Device_Init (ctx, &tcti_size, NULL);
+    assert_true (ret == TSS2_RC_SUCCESS);
+
+    free(ctx);
+}
+
 /* wrap functions for read & write required to test receive / transmit */
 ssize_t
 __wrap_read (int fd, void *buf, size_t count)
@@ -100,6 +187,16 @@ tcti_device_setup (void **state)
     assert_true (ret == TSS2_RC_SUCCESS);
     ctx = calloc (1, tcti_size);
     assert_non_null (ctx);
+    will_return (__wrap_open, 3);
+    will_return (__wrap_write, 12);
+    will_return (__wrap_write, tpm2_buf);
+    will_return (__wrap_poll, 1);
+    will_return (__wrap_read, 10);
+    will_return (__wrap_read, tpm2_buf);
+    will_return (__wrap_poll, 1);
+    will_return (__wrap_read, 0);
+    will_return (__wrap_read, tpm2_buf);
+    will_return (__wrap_open, 3);
     ret = Tss2_Tcti_Device_Init (ctx, &tcti_size, "/dev/null");
     assert_true (ret == TSS2_RC_SUCCESS);
 
@@ -133,12 +230,8 @@ tcti_device_get_poll_handles_test (void **state)
     TSS2_RC rc;
 
     rc = Tss2_Tcti_GetPollHandles (ctx, handles, &num_handles);
-#ifdef TCTI_ASYNC
     assert_int_equal (rc, TSS2_RC_SUCCESS);
     assert_int_equal (num_handles, 1);
-#else
-    assert_int_equal (rc, TSS2_TCTI_RC_NOT_IMPLEMENTED);
-#endif
 }
 /*
  */
@@ -235,6 +328,7 @@ tcti_device_receive_buffer_lt_response (void **state)
     uint8_t buf_out [BUF_SIZE] = { 0 };
     /* set size to lt the size in the header of the TPM2 response buffer */
     size_t size = BUF_SIZE - 1;
+    size_t small_size = TPM_HEADER_SIZE + 1;
 
     /* Keep state machine check in `receive` from returning error. */
     tcti_common->state = TCTI_STATE_RECEIVE;
@@ -242,7 +336,7 @@ tcti_device_receive_buffer_lt_response (void **state)
     will_return (__wrap_read, size);
     will_return (__wrap_read, tpm2_buf);
     rc = Tss2_Tcti_Receive (ctx,
-                            &size,
+                            &small_size,
                             buf_out,
                             TSS2_TCTI_TIMEOUT_BLOCK);
     assert_int_equal (rc, TSS2_TCTI_RC_GENERAL_FAILURE);
@@ -351,6 +445,9 @@ main(int argc, char* argv[])
     const struct CMUnitTest tests[] = {
         cmocka_unit_test (tcti_device_init_all_null_test),
         cmocka_unit_test(tcti_device_init_size_test),
+        cmocka_unit_test(tcti_device_init_conf_fail),
+        cmocka_unit_test(tcti_device_init_conf_default_fail),
+        cmocka_unit_test(tcti_device_init_conf_default_success),
         cmocka_unit_test_setup_teardown (tcti_device_get_poll_handles_test,
                                          tcti_device_setup,
                                          tcti_device_teardown),
@@ -364,9 +461,6 @@ main(int argc, char* argv[])
                                          tcti_device_setup,
                                          tcti_device_teardown),
         cmocka_unit_test_setup_teardown (tcti_device_receive_buffer_lt_response,
-                                         tcti_device_setup,
-                                         tcti_device_teardown),
-        cmocka_unit_test_setup_teardown (tcti_device_transmit_success,
                                          tcti_device_setup,
                                          tcti_device_teardown),
         cmocka_unit_test_setup_teardown (tcti_device_transmit_success,

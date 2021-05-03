@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,22 +17,13 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
 static void store_input_parameters (
     ESYS_CONTEXT *esysContext,
-    ESYS_TR parentHandle,
-    const TPM2B_PRIVATE *inPrivate,
     const TPM2B_PUBLIC *inPublic)
 {
-    esysContext->in.Load.parentHandle = parentHandle;
-    if (inPrivate == NULL) {
-        esysContext->in.Load.inPrivate = NULL;
-    } else {
-        esysContext->in.Load.inPrivateData = *inPrivate;
-        esysContext->in.Load.inPrivate =
-            &esysContext->in.Load.inPrivateData;
-    }
     if (inPublic == NULL) {
         esysContext->in.Load.inPublic = NULL;
     } else {
@@ -107,10 +102,10 @@ Esys_Load(
         r = Esys_Load_Finish(esysContext, objectHandle);
         /* This is just debug information about the reattempt to finish the
            command */
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN)
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
-    } while ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN);
+    } while (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN);
 
     /* Restore the timeout value to the original value */
     esysContext->timeout = timeouttmp;
@@ -177,10 +172,10 @@ Esys_Load_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 1);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, parentHandle, inPrivate, inPublic);
+    store_input_parameters(esysContext, inPublic);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, parentHandle, &parentHandleNode);
@@ -196,8 +191,12 @@ Esys_Load_Async(
     /* Calculate the cpHash Values */
     r = init_session_tab(esysContext, shandle1, shandle2, shandle3);
     return_state_if_error(r, _ESYS_STATE_INIT, "Initialize session resources");
-    iesys_compute_session_value(esysContext->session_tab[0],
+    if (parentHandleNode != NULL)
+        iesys_compute_session_value(esysContext->session_tab[0],
                 &parentHandleNode->rsrc.name, &parentHandleNode->auth);
+    else
+        iesys_compute_session_value(esysContext->session_tab[0], NULL, NULL);
+
     iesys_compute_session_value(esysContext->session_tab[1], NULL, NULL);
     iesys_compute_session_value(esysContext->session_tab[2], NULL, NULL);
 
@@ -207,8 +206,10 @@ Esys_Load_Async(
                           "Error in computation of auth values");
 
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
@@ -262,7 +263,8 @@ Esys_Load_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -280,14 +282,17 @@ Esys_Load_Finish(
     if (r != TSS2_RC_SUCCESS)
         return r;
 
-
-    /* Update the meta data of the ESYS_TR object */
-    objectHandleNode->rsrc.rsrcType = IESYSC_KEY_RSRC;
-    objectHandleNode->rsrc.misc.rsrc_key_pub = *esysContext->in.Load.inPublic;
+    if (esysContext->in.Load.inPublic) {
+        /* Update the meta data of the ESYS_TR object */
+        objectHandleNode->rsrc.rsrcType = IESYSC_KEY_RSRC;
+        objectHandleNode->rsrc.misc.rsrc_key_pub = *esysContext->in.Load.inPublic;
+    } else {
+        objectHandleNode->rsrc.misc.rsrc_key_pub.size = 0;
+    }
 
     /*Receive the TPM response and handle resubmissions if necessary. */
     r = Tss2_Sys_ExecuteFinish(esysContext->sys, esysContext->timeout);
-    if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
+    if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN) {
         LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32, r);
         esysContext->state = _ESYS_STATE_SENT;
         goto error_cleanup;
@@ -297,18 +302,13 @@ Esys_Load_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             goto error_cleanup;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_Load_Async(esysContext, esysContext->in.Load.parentHandle,
-                            esysContext->session_type[0],
-                            esysContext->session_type[1],
-                            esysContext->session_type[2],
-                            esysContext->in.Load.inPrivate,
-                            esysContext->in.Load.inPublic);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent

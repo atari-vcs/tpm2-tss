@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,14 +17,7 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
-
-/** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
-static void store_input_parameters (
-    ESYS_CONTEXT *esysContext,
-    TPM2_SU startupType)
-{
-    esysContext->in.Startup.startupType = startupType;
-}
+#include "util/aux_util.h"
 
 /** One-Call function for TPM2_Startup
  *
@@ -71,10 +68,10 @@ Esys_Startup(
         r = Esys_Startup_Finish(esysContext);
         /* This is just debug information about the reattempt to finish the
            command */
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN)
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
-    } while ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN);
+    } while (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN);
 
     /* Restore the timeout value to the original value */
     esysContext->timeout = timeouttmp;
@@ -119,7 +116,6 @@ Esys_Startup_Async(
     if (r != TSS2_RC_SUCCESS)
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
-    store_input_parameters(esysContext, startupType);
 
     /* Initial invocation of SAPI to prepare the command buffer with parameters */
     r = Tss2_Sys_Startup_Prepare(esysContext->sys, startupType);
@@ -175,7 +171,8 @@ Esys_Startup_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -183,7 +180,7 @@ Esys_Startup_Finish(
 
     /*Receive the TPM response and handle resubmissions if necessary. */
     r = Tss2_Sys_ExecuteFinish(esysContext->sys, esysContext->timeout);
-    if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
+    if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN) {
         LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32, r);
         esysContext->state = _ESYS_STATE_SENT;
         return r;
@@ -193,14 +190,13 @@ Esys_Startup_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             return r;
         }
-        esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_Startup_Async(esysContext,
-                               esysContext->in.Startup.startupType);
+        esysContext->state = _ESYS_STATE_SENT;
+	r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent

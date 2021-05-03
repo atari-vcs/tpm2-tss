@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015 - 2017, Intel Corporation
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
@@ -20,6 +24,9 @@ TSS2_RC Tss2_Sys_SetCommandCodeAuditStatus_Prepare(
 
     if (!ctx || !setList  || !clearList)
         return TSS2_SYS_RC_BAD_REFERENCE;
+
+    if (IsAlgorithmWeak(auditAlg, 0))
+        return TSS2_SYS_RC_BAD_VALUE;
 
     rval = CommonPreparePrologue(ctx, TPM2_CC_SetCommandCodeAuditStatus);
     if (rval)

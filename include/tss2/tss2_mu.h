@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2017, Intel Corporation
  *
@@ -791,6 +791,20 @@ Tss2_MU_TPMS_TAGGED_PROPERTY_Unmarshal(
     TPMS_TAGGED_PROPERTY *dest);
 
 TSS2_RC
+Tss2_MU_TPMS_TAGGED_POLICY_Marshal(
+    TPMS_TAGGED_POLICY  const *src,
+    uint8_t         buffer[],
+    size_t          buffer_size,
+    size_t         *offset);
+
+TSS2_RC
+Tss2_MU_TPMS_TAGGED_POLICY_Unmarshal(
+    uint8_t const   buffer[],
+    size_t          buffer_size,
+    size_t         *offset,
+    TPMS_TAGGED_POLICY *dest);
+
+TSS2_RC
 Tss2_MU_TPMS_CLOCK_INFO_Marshal(
     TPMS_CLOCK_INFO  const *src,
     uint8_t         buffer[],
@@ -1209,6 +1223,20 @@ Tss2_MU_TPMS_AC_OUTPUT_Unmarshal(
     size_t          buffer_size,
     size_t         *offset,
     TPMS_AC_OUTPUT *dest);
+
+TSS2_RC
+Tss2_MU_TPMS_ID_OBJECT_Marshal(
+    TPMS_ID_OBJECT  const *src,
+    uint8_t         buffer[],
+    size_t          buffer_size,
+    size_t         *offset);
+
+TSS2_RC
+Tss2_MU_TPMS_ID_OBJECT_Unmarshal(
+    uint8_t const   buffer[],
+    size_t          buffer_size,
+    size_t         *offset,
+    TPMS_ID_OBJECT *dest);
 
 TSS2_RC
 Tss2_MU_TPML_CC_Marshal(
@@ -1938,6 +1966,20 @@ Tss2_MU_TPM2_SE_Unmarshal(
     size_t          size,
     size_t          *offset,
     TPM2_SE         *out);
+
+TSS2_RC
+Tss2_MU_TPM2_NT_Marshal(
+    TPM2_NT         in,
+    uint8_t         *buffer,
+    size_t          size,
+    size_t          *offset);
+
+TSS2_RC
+Tss2_MU_TPM2_NT_Unmarshal(
+    uint8_t const   buffer[],
+    size_t          size,
+    size_t          *offset,
+    TPM2_NT         *out);
 
 TSS2_RC
 Tss2_MU_TPMS_EMPTY_Marshal(

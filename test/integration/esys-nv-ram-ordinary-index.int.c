@@ -1,27 +1,32 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI commands  nv define space, nv write,
+/** This test is intended to test the ESYS commands  nv define space, nv write,
  *  nv read command, nv lock write and nv lock read, and nv undefine.
  *
- * The names stored in the ESAPI resource are compared
+ * The names stored in the ESYS resource are compared
  * with the names delivered from the TPM by the command ReadPublic.
  * only one of the tests NV_ReadLock and NV_WriteLock can be activated
  * by the defines TEST_READ_LOCK and TEST_WRITE_LOCK (-D option)
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_FlushContext() (M)
  *  - Esys_NV_DefineSpace() (M)
  *  - Esys_NV_Read() (M)
@@ -44,6 +49,11 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
 {
     TSS2_RC r;
     ESYS_TR nvHandle = ESYS_TR_NONE;
+
+    TPM2B_NV_PUBLIC *nvPublic = NULL;
+    TPM2B_NAME *nvName = NULL;
+    TPM2B_MAX_NV_BUFFER *nv_test_data2 = NULL;
+
 #ifdef TEST_SESSION
     ESYS_TR session = ESYS_TR_NONE;
     TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
@@ -113,9 +123,6 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
                                          .buffer={0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0,
                                                   1, 2, 3, 4, 5, 6, 7, 8, 9}};
 
-    TPM2B_NV_PUBLIC *nvPublic;
-    TPM2B_NAME *nvName;
-
     r = Esys_NV_ReadPublic(esys_context,
                            nvHandle,
                            ESYS_TR_NONE,
@@ -150,6 +157,9 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error esys nv write", error);
 
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
+
     r = Esys_NV_ReadPublic(esys_context,
                            nvHandle,
                            ESYS_TR_NONE,
@@ -168,8 +178,6 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
         goto error;
     }
 
-    TPM2B_MAX_NV_BUFFER *nv_test_data2;
-
     r = Esys_NV_Read(esys_context,
                      nvHandle,
                      nvHandle,
@@ -185,6 +193,10 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
                      &nv_test_data2);
 
     goto_if_error(r, "Error esys nv read", error);
+
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
+    Esys_Free(nv_test_data2);
 
     r = Esys_NV_ReadPublic(esys_context,
                            nvHandle,
@@ -217,6 +229,9 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
                          ESYS_TR_NONE
                          );
     goto_if_error(r, "Error: NV_ReadLock", error);
+
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
 
     r = Esys_NV_ReadPublic(esys_context,
                            nvHandle,
@@ -265,6 +280,9 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
                           ESYS_TR_NONE
                           );
     goto_if_error(r, "Error: NV_WriteLock", error);
+
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
 
     r = Esys_NV_ReadPublic(esys_context,
                            nvHandle,
@@ -316,6 +334,9 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, session);
     goto_if_error(r, "Error: FlushContext", error);
 #endif
+
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
     return EXIT_SUCCESS;
 
  error:
@@ -342,10 +363,13 @@ test_esys_nv_ram_ordinary_index(ESYS_CONTEXT * esys_context)
         }
     }
 #endif
+    Esys_Free(nvPublic);
+    Esys_Free(nvName);
+    Esys_Free(nv_test_data2);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_nv_ram_ordinary_index(esys_context);
 }

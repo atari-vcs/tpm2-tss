@@ -1,23 +1,28 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
-#include "test-esapi.h"
+#include "test-esys.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Test the basic commands for PCR processing.
  *
  *\b Note: platform authorization needed.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_PCR_Allocate() (M)
  *  - Esys_PCR_Event() (M)
  *  - Esys_PCR_Extend() (M)
@@ -35,6 +40,11 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
 {
     TSS2_RC r;
     int failure_return = EXIT_FAILURE;
+
+    TPMS_CAPABILITY_DATA *savedPCRs = NULL;
+    TPML_PCR_SELECTION *pcrSelectionOut = NULL;
+    TPML_DIGEST *pcrValues = NULL;
+    TPML_DIGEST_VALUES *digestsEvent = NULL;
 
     ESYS_TR  pcrHandle_handle = 16;
     TPML_DIGEST_VALUES digests
@@ -74,8 +84,6 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
         }
     };
     UINT32 pcrUpdateCounter;
-    TPML_PCR_SELECTION *pcrSelectionOut;
-    TPML_DIGEST *pcrValues;
 
     r = Esys_PCR_Read(
         esys_context,
@@ -100,8 +108,6 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
     TPM2B_EVENT eventData = { .size = 20,
                               .buffer={0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0,
                                        1, 2, 3, 4, 5, 6, 7, 8, 9}};
-    TPML_DIGEST_VALUES *digestsEvent;
-
     r = Esys_PCR_Event(
         esys_context,
         pcrHandle_handle,
@@ -118,6 +124,12 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
     UINT32 sizeNeeded;
     UINT32 sizeAvailable;
 
+    r = Esys_GetCapability(esys_context,
+                           ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                           TPM2_CAP_PCRS, 0, 10, NULL, &savedPCRs);
+    goto_if_error(r, "Error: GetCapabilities", error);
+
+
     r = Esys_PCR_Allocate(
         esys_context,
         ESYS_TR_RH_PLATFORM,
@@ -130,7 +142,7 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
         &sizeNeeded,
         &sizeAvailable);
 
-    if ((r & ~TPM2_RC_N_MASK) == TPM2_RC_BAD_AUTH) {
+    if (number_rc(r) == TPM2_RC_BAD_AUTH) {
         /* Platform authorization not possible test will be skipped */
         LOG_WARNING("Platform authorization not possible.");
         failure_return =  EXIT_SKIP;
@@ -138,14 +150,36 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error: PCR_Allocate", error);
 
+    r = Esys_PCR_Allocate(
+        esys_context,
+        ESYS_TR_RH_PLATFORM,
+        ESYS_TR_PASSWORD,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &savedPCRs->data.assignedPCR,
+        &allocationSuccess,
+        &maxPCR,
+        &sizeNeeded,
+        &sizeAvailable);
+
+    goto_if_error(r, "Error: PCR_Allocate", error);
+
+    Esys_Free(savedPCRs);
+    Esys_Free(pcrSelectionOut);
+    Esys_Free(pcrValues);
+    Esys_Free(digestsEvent);
     return EXIT_SUCCESS;
 
  error:
+    Esys_Free(savedPCRs);
+    Esys_Free(pcrSelectionOut);
+    Esys_Free(pcrValues);
+    Esys_Free(digestsEvent);
     return failure_return;
 
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_pcr_basic(esys_context);
 }

@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdlib.h>
 
 #include "tss2_esys.h"
@@ -10,6 +14,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This tests the Esys_TR_FromTPMPublic and Esys_TR_GetName functions by
  *  creating an NV Index and then attempting to retrieve an ESYS_TR object for
@@ -17,7 +22,7 @@
  *  Then we call Esys_TR_GetName to see if the correct public name has been
  * retrieved.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_NV_DefineSpace() (M)
  *  - Esys_NV_ReadPublic() (M)
  *  - Esys_NV_UndefineSpace() (M)
@@ -111,6 +116,6 @@ error:
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_tr_fromTpmPublic_nv(esys_context);
 }

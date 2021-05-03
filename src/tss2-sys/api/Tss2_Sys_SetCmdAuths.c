@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <string.h>
 
 #include "util/tss2_endian.h"
@@ -16,7 +20,7 @@ TSS2_RC Tss2_Sys_SetCmdAuths(
     const TSS2L_SYS_AUTH_COMMAND *cmdAuthsArray)
 {
     _TSS2_SYS_CONTEXT_BLOB *ctx = syscontext_cast(sysContext);
-    uint8_t i;
+    uint16_t i;
     UINT32 authSize = 0;
     UINT32 newCmdSize = 0;
     size_t authOffset;
@@ -25,8 +29,9 @@ TSS2_RC Tss2_Sys_SetCmdAuths(
     if (!ctx || !cmdAuthsArray)
         return TSS2_SYS_RC_BAD_REFERENCE;
 
-    if (cmdAuthsArray->count > TPM2_MAX_SESSION_NUM)
-        return TSS2_SYS_RC_BAD_VALUE;
+    if (cmdAuthsArray->count > TSS2_SYS_MAX_SESSIONS ||
+        cmdAuthsArray->count == 0)
+        return TSS2_SYS_RC_BAD_SIZE;
 
     if (ctx->previousStage != CMD_STAGE_PREPARE)
         return TSS2_SYS_RC_BAD_SEQUENCE;
@@ -35,9 +40,6 @@ TSS2_RC Tss2_Sys_SetCmdAuths(
         return rval;
 
     ctx->authsCount = 0;
-
-    if (!cmdAuthsArray->count)
-        return rval;
 
     req_header_from_cxt(ctx)->tag = HOST_TO_BE_16(TPM2_ST_SESSIONS);
 
@@ -66,7 +68,7 @@ TSS2_RC Tss2_Sys_SetCmdAuths(
             ctx->cpBuffer, ctx->cpBufferUsedSize);
 
     /* Reset the auth size field */
-    *(UINT32 *)ctx->cpBuffer = 0;
+    memset(ctx->cpBuffer, 0, sizeof(UINT32));
 
     /* Now copy in the authorization area. */
     authOffset = ctx->cpBuffer - ctx->cmdBuffer;

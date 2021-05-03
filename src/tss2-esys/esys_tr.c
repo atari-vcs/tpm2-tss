@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_esys.h"
 #include "esys_mu.h"
@@ -10,6 +14,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE esys
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Serialization of an ESYS_TR into a byte buffer.
  *
@@ -136,13 +141,15 @@ Esys_TR_FromTPMPublic_Async(ESYS_CONTEXT * esys_context,
     esys_context->esys_handle = esys_handle;
 
     if (tpm_handle >= TPM2_NV_INDEX_FIRST && tpm_handle <= TPM2_NV_INDEX_LAST) {
-        esys_context->in.NV_ReadPublic.nvIndex = esys_handle;
         r = Esys_NV_ReadPublic_Async(esys_context, esys_handle, shandle1,
                                      shandle2, shandle3);
         goto_if_error(r, "Error NV_ReadPublic", error_cleanup);
 
+    } else if(tpm_handle >> TPM2_HR_SHIFT == TPM2_HT_LOADED_SESSION
+            || tpm_handle >> TPM2_HR_SHIFT == TPM2_HT_SAVED_SESSION) {
+        // no readpublic call for loaded or saved sessions.
+        r = TSS2_RC_SUCCESS;
     } else {
-        esys_context->in.ReadPublic.objectHandle = esys_handle;
         r = Esys_ReadPublic_Async(esys_context, esys_handle, shandle1, shandle2,
                                   shandle3);
         goto_if_error(r, "Error ReadPublic", error_cleanup);
@@ -180,10 +187,13 @@ TSS2_RC
 Esys_TR_FromTPMPublic_Finish(ESYS_CONTEXT * esys_context, ESYS_TR * object)
 {
     TSS2_RC r = TSS2_RC_SUCCESS;
-    ESYS_TR objectHandle = esys_context->esys_handle;
+    ESYS_TR objectHandle = ESYS_TR_NONE;
     RSRC_NODE_T *objectHandleNode;
 
     _ESYS_ASSERT_NON_NULL(esys_context);
+
+    objectHandle = esys_context->esys_handle;
+
     r = esys_GetResourceObject(esys_context, objectHandle, &objectHandleNode);
     goto_if_error(r, "get resource", error_cleanup);
 
@@ -192,7 +202,7 @@ Esys_TR_FromTPMPublic_Finish(ESYS_CONTEXT * esys_context, ESYS_TR * object)
         TPM2B_NV_PUBLIC *nvPublic;
         TPM2B_NAME *nvName;
         r = Esys_NV_ReadPublic_Finish(esys_context, &nvPublic, &nvName);
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN) {
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
             return r;
@@ -204,13 +214,16 @@ Esys_TR_FromTPMPublic_Finish(ESYS_CONTEXT * esys_context, ESYS_TR * object)
         objectHandleNode->rsrc.misc.rsrc_nv_pub = *nvPublic;
         SAFE_FREE(nvPublic);
         SAFE_FREE(nvName);
+    } else if(objectHandleNode->rsrc.handle >> TPM2_HR_SHIFT == TPM2_HT_LOADED_SESSION
+            || objectHandleNode->rsrc.handle >> TPM2_HR_SHIFT == TPM2_HT_SAVED_SESSION) {
+        objectHandleNode->rsrc.rsrcType = IESYSC_DEGRADED_SESSION_RSRC;
     } else {
         TPM2B_PUBLIC *public;
         TPM2B_NAME *name = NULL;
         TPM2B_NAME *qualifiedName = NULL;
         r = Esys_ReadPublic_Finish(esys_context, &public, &name,
                                    &qualifiedName);
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN) {
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
             return r;
@@ -298,10 +311,10 @@ Esys_TR_FromTPMPublic(ESYS_CONTEXT * esys_context,
      */
     do {
         r = Esys_TR_FromTPMPublic_Finish(esys_context, object);
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN)
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
-    } while ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN);
+    } while (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN);
 
     /* Restore the timeout value to the original value */
     esys_context->timeout = timeouttmp;
@@ -355,7 +368,8 @@ Esys_TR_Close(ESYS_CONTEXT * esys_context, ESYS_TR * object)
  * every Esys_TR_Deserialize.
  * @param esys_context [in,out] The ESYS_CONTEXT.
  * @param esys_handle [in,out] The ESYS_TR for which to set the auth value.
- * @param authValue [in] The auth value to set for the ESYS_TR.
+ * @param authValue [in] The auth value to set for the ESYS_TR or NULL to zero
+ *        the auth.
  * @retval TSS2_RC_SUCCESS on Success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext is NULL.
  * @retval TSS2_ESYS_RC_BAD_TR if the ESYS_TR object is unknown to the
@@ -371,7 +385,15 @@ Esys_TR_SetAuth(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
     r = esys_GetResourceObject(esys_context, esys_handle, &esys_object);
     if (r != TPM2_RC_SUCCESS)
         return r;
-    esys_object->auth = *authValue;
+
+    if (authValue == NULL) {
+        esys_object->auth.size = 0;
+    } else {
+        if (authValue->size > sizeof(TPMU_HA)) {
+            return_error(TSS2_ESYS_RC_BAD_SIZE, "Bad size for auth value.");
+        }
+        esys_object->auth = *authValue;
+    }
     return TSS2_RC_SUCCESS;
 }
 
@@ -424,7 +446,7 @@ Esys_TR_GetName(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
     }
     return r;
  error_cleanup:
-    SAFE_FREE(name);
+    SAFE_FREE(*name);
     return r;
 }
 
@@ -482,11 +504,15 @@ Esys_TRSess_SetAttributes(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
     TSS2_RC r = esys_GetResourceObject(esys_context, esys_handle, &esys_object);
     return_if_error(r, "Object not found");
 
+    return_if_null(esys_object, "Object not found", TSS2_ESYS_RC_BAD_VALUE);
+
     if (esys_object->rsrc.rsrcType != IESYSC_SESSION_RSRC)
         return_error(TSS2_ESYS_RC_BAD_TR, "Object is not a session object");
     esys_object->rsrc.misc.rsrc_session.sessionAttributes =
         (esys_object->rsrc.misc.rsrc_session.
          sessionAttributes & ~mask) | (flags & mask);
+    if (esys_object->rsrc.misc.rsrc_session.sessionAttributes & TPMA_SESSION_AUDIT)
+        esys_object->rsrc.misc.rsrc_session.bound_entity.size = 0;
     return TSS2_RC_SUCCESS;
 }
 
@@ -533,4 +559,81 @@ Esys_TRSess_GetNonceTPM(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
  error_cleanup:
     SAFE_FREE(*nonceTPM);
     return r;
+}
+
+/** Retrieves the associated TPM2_HANDLE from an ESYS_TR object.
+ *
+ * Retrieves the TPM2_HANDLE for an associated ESYS_TR object for use with the
+ * SAPI API or comparisons against raw TPM2_HANDLES from commands like
+ * TPM2_GetCapability or use of various handle bitwise comparisons. For example
+ * the mask TPM2_HR_NV_INDEX.
+ *
+ * @param esys_context [in,out] The ESYS_CONTEXT.
+ * @param esys_handle [in] The ESYS_TR object to retrieve the TPM2_HANDLE from.
+ * @param tpm_handle [out] The TPM2_HANDLE retrieved from the ESYS_TR object.
+ * @retval TSS2_RC_SUCCESS on Success.
+ * @retval TSS2_ESYS_RC_BAD_TR if the ESYS_TR object is unknown to the
+ *         ESYS_CONTEXT or is ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_VALUE if an unknown handle < ESYS_TR_MIN_OBJECT is
+ *         passed.
+ * @retval TSS2_ESYS_RC_BAD_REFERENCE For invalid ESYS_CONTEXT.
+ */
+TSS2_RC
+Esys_TR_GetTpmHandle(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
+                  TPM2_HANDLE * tpm_handle)
+{
+    TSS2_RC r = TSS2_RC_SUCCESS;
+    RSRC_NODE_T *esys_object;
+
+    _ESYS_ASSERT_NON_NULL(esys_context);
+    _ESYS_ASSERT_NON_NULL(tpm_handle);
+
+    if (esys_handle == ESYS_TR_NONE) {
+        return TSS2_ESYS_RC_BAD_TR;
+    }
+
+    r = esys_GetResourceObject(esys_context, esys_handle, &esys_object);
+    return_if_error(r, "Get resource object");
+
+    *tpm_handle = esys_object->rsrc.handle;
+
+    return TSS2_RC_SUCCESS;
+};
+
+/** Retrieve whether auth value is required from a Esys_TR session object.
+ *
+ * This function can be used to determin whether PoliyPassword or
+ * PlolicyAuthValue are used for a session.
+ * @param esys_context [in,out] The ESYS_CONTEXT.
+ * @param esys_handle [in,out] The ESYS_TRsess for which to retrieve the nonce.
+ * @param neeed [out] The boolean indicating whether auth value will be
+ *                    needed.
+ * @retval TSS2_RC_SUCCESS on Success.
+ * @retval TSS2_ESYS_RC_GENERAL_FAILURE for errors of the crypto library.
+ * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext is NULL.
+ * @retval TSS2_SYS_RC_* for SAPI errors.
+ */
+TSS2_RC
+Esys_TRSess_GetAuthRequired(ESYS_CONTEXT * esys_context, ESYS_TR esys_handle,
+                            TPMI_YES_NO *auth_needed)
+{
+    RSRC_NODE_T *esys_object;
+    TSS2_RC r;
+    _ESYS_ASSERT_NON_NULL(esys_context);
+
+    r = esys_GetResourceObject(esys_context, esys_handle, &esys_object);
+    return_if_error(r, "Object not found");
+
+    if (esys_object->rsrc.rsrcType != IESYSC_SESSION_RSRC) {
+        return_if_error(TSS2_ESYS_RC_BAD_TR,
+                        "Auth value needed for non-session object requested.");
+    }
+
+    if (esys_object->rsrc.misc.rsrc_session.type_policy_session == POLICY_AUTH ||
+        esys_object->rsrc.misc.rsrc_session.type_policy_session == POLICY_PASSWORD)
+        *auth_needed = TPM2_YES;
+    else
+        *auth_needed = TPM2_NO;
+    return TSS2_RC_SUCCESS;
+
 }

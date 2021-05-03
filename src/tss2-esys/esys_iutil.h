@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
@@ -9,7 +9,6 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <string.h>
-
 #include "tss2_esys.h"
 
 #include "esys_int.h"
@@ -19,79 +18,18 @@
 extern "C" {
 #endif
 
-#define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}
-
-#define TPM2_ERROR_FORMAT "%s%s (0x%08x)"
-#define TPM2_ERROR_TEXT(r) "Error", "Code", r
-
-#define return_if_error(r,msg) \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        return r;  \
-    }
-
-#define return_state_if_error(r,s,msg)      \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        esysContext->state = s; \
-        return r;  \
-    }
-
-#define return_error(r,msg) \
-    { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        return r;  \
-    }
-
-#define goto_state_if_error(r,s,msg,label) \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        esysContext->state = s; \
-        goto label;  \
-    }
-
-#define goto_if_null(p,msg,ec,label) \
-    if ((p) == NULL) { \
-        LOG_ERROR("%s ", (msg)); \
-        r = (ec); \
-        goto label;  \
-    }
-
-#define goto_if_error(r,msg,label) \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        goto label;  \
-    }
-
-#define goto_error(r,v,msg,label, ...)              \
-    { r = v;  \
-      LOG_ERROR(TPM2_ERROR_FORMAT " " msg, TPM2_ERROR_TEXT(r), ## __VA_ARGS__); \
-      goto label; \
-    }
-
-#define return_if_null(p,msg,ec) \
-    if (p == NULL) { \
-        LOG_ERROR("%s ", msg); \
-        return ec; \
-    }
-
-#define return_if_notnull(p,msg,ec) \
-    if (p != NULL) { \
-        LOG_ERROR("%s ", msg); \
-        return ec; \
-    }
-
-#define exit_if_error(r,msg) \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        exit(1);  \
-    }
-
-#define set_return_code(r_max, r, msg) \
-    if (r != TSS2_RC_SUCCESS) { \
-        LOG_ERROR("%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        r_max = r; \
-    }
+/*
+ * Start issuing ESYS_TR objects past the TPM2_RH_LAST namespace
+ * and give ourselves 0x1000 handle space in case of differing
+ * header files between the library build and the client build.
+ *
+ * Due to an API mistake, TPM2_RH constants are valid for a few
+ * select ESYS API calls.
+ *
+ * More details can be found here:
+ *   - https://github.com/tpm2-software/tpm2-tss/issues/1750
+ */
+#define ESYS_TR_MIN_OBJECT (TPM2_RH_LAST + 1 + 0x1000)
 
 /** An entry in a cpHash or rpHash table. */
 typedef struct {
@@ -99,13 +37,6 @@ typedef struct {
     size_t size;                     /**< The digest size. */
     uint8_t digest[sizeof(TPMU_HA)]; /**< The digest. */
 } HASH_TAB_ITEM;
-
-bool cmp_UINT16 (const UINT16 *in1, const UINT16 *in2);
-bool cmp_BYTE (const BYTE *in1, const BYTE *in2);
-bool cmp_BYTE_array(const BYTE *in1, size_t count1, const BYTE *in2, size_t count2);
-bool cmp_TPM2B_DIGEST (const TPM2B_DIGEST *in1, const TPM2B_DIGEST *in2);
-bool cmp_TPM2B_NAME (const TPM2B_NAME *in1, const TPM2B_NAME *in2);
-bool cmp_TPM2B_AUTH (const TPM2B_AUTH *in1, const TPM2B_AUTH *in2);
 
 TSS2_RC init_session_tab(
     ESYS_CONTEXT *esysContext,
@@ -143,6 +74,10 @@ TSS2_RC iesys_handle_to_tpm_handle(
     ESYS_TR esys_handle,
     TPM2_HANDLE *tpm_handle);
 
+bool
+iesys_is_platform_handle(
+        ESYS_TR handle);
+
 TSS2_RC esys_GetResourceObject(
     ESYS_CONTEXT *esys_context,
     ESYS_TR rsrc_handle,
@@ -171,9 +106,7 @@ TSS2_RC iesys_encrypt_param(
     int *decryptNonceIdx);
 
 TSS2_RC iesys_decrypt_param(
-    ESYS_CONTEXT *esysContext,
-    const uint8_t *rpBuffer,
-    size_t rpBuffer_size);
+    ESYS_CONTEXT *esysContext);
 
 TSS2_RC iesys_check_rp_hmacs(
     ESYS_CONTEXT *esysContext,

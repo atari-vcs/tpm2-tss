@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,12 +15,13 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** Test the ESAPI commands: HMAC_Start, SequenceUpdate, and SequenceComplete.
+/** Test the ESYS commands: HMAC_Start, SequenceUpdate, and SequenceComplete.
  *
  * The HMAC key is created by using Esys_CreatePrimary.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_HMAC_Start() (M)
@@ -36,6 +41,14 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
 {
     TSS2_RC r;
     ESYS_TR primaryHandle = ESYS_TR_NONE;
+
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
+    TPM2B_DIGEST *result = NULL;
+    TPMT_TK_HASHCHECK *validation = NULL;
 
 #ifdef TEST_SESSION
     ESYS_TR session = ESYS_TR_NONE;
@@ -67,7 +80,7 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -89,11 +102,6 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
     TPML_PCR_SELECTION creationPCR = {
         .count = 0,
     };
-
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
 
     inPublic.publicArea.nameAlg = TPM2_ALG_SHA1;
     inPublic.publicArea.type = TPM2_ALG_KEYEDHASH;
@@ -154,8 +162,69 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
                             );
     goto_if_error(r, "Error: SequenceUpdate", error);
 
-    TPM2B_DIGEST *result;
-    TPMT_TK_HASHCHECK *validation;
+    r = Esys_SequenceComplete(esys_context,
+                              sequenceHandle,
+#ifdef TEST_SESSION
+                              session,
+#else
+                              ESYS_TR_PASSWORD,
+#endif
+                              ESYS_TR_NONE,
+                              ESYS_TR_NONE,
+                              &buffer,
+                              ESYS_TR_RH_OWNER,
+                              &result,
+                              &validation
+                              );
+    goto_if_error(r, "Error: SequenceComplete", error);
+
+#ifdef TEST_SESSION
+    r = Esys_FlushContext(esys_context, session);
+    goto_if_error(r, "Error: FlushContext", error);
+#endif
+
+    Esys_Free(result);
+    Esys_Free(validation);
+
+    /* Check HMAC_Start with auth equal NULL */
+
+#ifdef TEST_SESSION
+    r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
+                              ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                              &nonceCaller,
+                              TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA1,
+                              &session);
+
+    goto_if_error(r, "Error: During initialization of session", error);
+#endif /* TEST_SESSION */
+
+    r = Esys_HMAC_Start(esys_context,
+                        primaryHandle,
+#ifdef TEST_SESSION
+                        session,
+#else
+                        ESYS_TR_PASSWORD,
+#endif
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        NULL,
+                        hashAlg,
+                        &sequenceHandle
+                        );
+    goto_if_error(r, "Error: HashSequenceStart", error);
+
+    r = Esys_SequenceUpdate(esys_context,
+                            sequenceHandle,
+#ifdef TEST_SESSION
+                            session,
+#else
+                            ESYS_TR_PASSWORD,
+#endif
+                            ESYS_TR_NONE,
+                            ESYS_TR_NONE,
+                            &buffer
+                            );
+    goto_if_error(r, "Error: SequenceUpdate", error);
 
     r = Esys_SequenceComplete(esys_context,
                               sequenceHandle,
@@ -167,7 +236,7 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
                               ESYS_TR_NONE,
                               ESYS_TR_NONE,
                               &buffer,
-                              TPM2_RH_OWNER,
+                              ESYS_TR_RH_OWNER,
                               &result,
                               &validation
                               );
@@ -181,6 +250,12 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: FlushContext", error);
 #endif
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(result);
+    Esys_Free(validation);
     return EXIT_SUCCESS;
 
  error:
@@ -199,10 +274,16 @@ test_esys_hmacsequencestart(ESYS_CONTEXT * esys_context)
     }
 #endif
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(result);
+    Esys_Free(validation);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_hmacsequencestart(esys_context);
 }

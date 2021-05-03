@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 /* Default TCTI */
-#define TCTI_DEFAULT      SOCKET_TCTI
+#define TCTI_DEFAULT      SWTPM_TCTI
 #define TCTI_DEFAULT_STR  "socket"
 
 /* Defaults for Device TCTI */
@@ -22,7 +22,7 @@
 
 /* environment variables holding TCTI config */
 #define ENV_TCTI_NAME      "TPM20TEST_TCTI_NAME"
-#define ENV_DEVICE_FILE    "TPM2OTEST_DEVICE_FILE"
+#define ENV_DEVICE_FILE    "TPM20TEST_DEVICE_FILE"
 #define ENV_SOCKET_ADDRESS "TPM20TEST_SOCKET_ADDRESS"
 #define ENV_SOCKET_PORT    "TPM20TEST_SOCKET_PORT"
 
@@ -30,13 +30,15 @@ typedef enum {
     UNKNOWN_TCTI,
     DEVICE_TCTI,
     SOCKET_TCTI,
+    SWTPM_TCTI,
+    FUZZING_TCTI,
     N_TCTI,
 } TCTI_TYPE;
 
 typedef struct {
     TCTI_TYPE tcti_type;
-    char *device_file;
-    char *socket_address;
+    const char *device_file;
+    const char *socket_address;
     uint16_t socket_port;
 } test_opts_t;
 

@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,15 +15,16 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI command  Esys_HMAC with password
+/** This test is intended to test the ESYS command  Esys_HMAC with password
  *  authentication.
  *
  * We create a symmetric HMAC key signing key which will be used
  * for signing. This key will be used to create the HMAC for a test
  * buffer.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_HMAC() (O)
@@ -35,13 +40,19 @@ test_esys_hmac(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR primaryHandle = ESYS_TR_NONE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_DIGEST *outHMAC = NULL;
+
     TPM2B_AUTH authValuePrimary = {
         .size = 5,
         .buffer = {1, 2, 3, 4, 5}
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -64,11 +75,6 @@ test_esys_hmac(ESYS_CONTEXT * esys_context)
         .count = 0,
     };
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     inPublic.publicArea.nameAlg = TPM2_ALG_SHA1;
     inPublic.publicArea.type = TPM2_ALG_KEYEDHASH;
     inPublic.publicArea.objectAttributes |= TPMA_OBJECT_SIGN_ENCRYPT;
@@ -90,8 +96,6 @@ test_esys_hmac(ESYS_CONTEXT * esys_context)
     TPM2B_MAX_BUFFER test_buffer = { .size = 20,
                                      .buffer={0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0,
                                               1, 2, 3, 4, 5, 6, 7, 8, 9}} ;
-    TPM2B_DIGEST *outHMAC;
-
     r = Esys_HMAC(
         esys_context,
         primaryHandle,
@@ -106,6 +110,11 @@ test_esys_hmac(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, primaryHandle);
     goto_if_error(r, "Error: FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outHMAC);
     return EXIT_SUCCESS;
 
  error:
@@ -116,10 +125,15 @@ test_esys_hmac(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(outHMAC);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_hmac(esys_context);
 }

@@ -27,9 +27,6 @@
     <ClCompile Include="esys_mu.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="esys_tcti_default.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="esys_tr.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -395,9 +392,6 @@
     <ClInclude Include="esys_mu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="esys_tcti_default.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="esys_types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -405,6 +399,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="esys_crypto_ossl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="../tss2-tcti/tctildr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="../tss2-tcti/tctildr-interface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

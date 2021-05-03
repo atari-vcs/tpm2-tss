@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -12,10 +16,11 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** This test is intended to test the ESAPI policy authorization.
+/** This test is intended to test the ESYS policy authorization.
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_PolicyAuthorize() (M)
@@ -35,6 +40,15 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
     ESYS_TR primaryHandle = ESYS_TR_NONE;
     ESYS_TR sessionTrial = ESYS_TR_NONE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+
+    TPM2B_NAME *nameKeySign = NULL;
+    TPM2B_NAME *keyQualifiedName = NULL;
+    TPM2B_DIGEST *policyAuthorizeDigest = NULL;
+
     /*
      * 1. Create Primary. This primary will be used for PolicyAuthorize.
      */
@@ -45,7 +59,7 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = authValuePrimary,
             .data = {
@@ -107,11 +121,6 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &authValue);
     goto_if_error(r, "Error: TR_SetAuth", error);
 
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
-
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE,
                            &inSensitivePrimary, &inPublic,
@@ -119,6 +128,8 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
     goto_if_error(r, "Error esys create primary", error);
+
+    Esys_Free(outPublic);
 
     /*
      * 2. Create a trial policy with PolicyAuthorized. The name primary key
@@ -140,9 +151,6 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
                               TPM2_SE_TRIAL, &symmetricTrial, TPM2_ALG_SHA1,
                               &sessionTrial);
     goto_if_error(r, "Error: During initialization of policy trial session", error);
-
-    TPM2B_NAME *nameKeySign;
-    TPM2B_NAME *keyQualifiedName;
 
     /* Dummy data for first call of PolicyAuthorize */
     TPM2B_DIGEST approvedPolicy = {0};
@@ -176,7 +184,6 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
         );
     goto_if_error(r, "Error: PolicyAuthorize", error);
 
-    TPM2B_DIGEST *policyAuthorizeDigest;
     r = Esys_PolicyGetDigest(esys_context,
                              sessionTrial,
                              ESYS_TR_NONE,
@@ -192,6 +199,14 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, primaryHandle);
     goto_if_error(r, "Error: FlushContext", error);
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+
+    Esys_Free(nameKeySign);
+    Esys_Free(keyQualifiedName);
+    Esys_Free(policyAuthorizeDigest);
     return EXIT_SUCCESS;
 
  error:
@@ -208,10 +223,18 @@ test_esys_policy_authorize(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+
+    Esys_Free(nameKeySign);
+    Esys_Free(keyQualifiedName);
+    Esys_Free(policyAuthorizeDigest);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_policy_authorize(esys_context);
 }

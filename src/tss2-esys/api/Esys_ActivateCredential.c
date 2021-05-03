@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,32 +17,7 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
-
-/** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
-static void store_input_parameters (
-    ESYS_CONTEXT *esysContext,
-    ESYS_TR activateHandle,
-    ESYS_TR keyHandle,
-    const TPM2B_ID_OBJECT *credentialBlob,
-    const TPM2B_ENCRYPTED_SECRET *secret)
-{
-    esysContext->in.ActivateCredential.activateHandle = activateHandle;
-    esysContext->in.ActivateCredential.keyHandle = keyHandle;
-    if (credentialBlob == NULL) {
-        esysContext->in.ActivateCredential.credentialBlob = NULL;
-    } else {
-        esysContext->in.ActivateCredential.credentialBlobData = *credentialBlob;
-        esysContext->in.ActivateCredential.credentialBlob =
-            &esysContext->in.ActivateCredential.credentialBlobData;
-    }
-    if (secret == NULL) {
-        esysContext->in.ActivateCredential.secret = NULL;
-    } else {
-        esysContext->in.ActivateCredential.secretData = *secret;
-        esysContext->in.ActivateCredential.secret =
-            &esysContext->in.ActivateCredential.secretData;
-    }
-}
+#include "util/aux_util.h"
 
 /** One-Call function for TPM2_ActivateCredential
  *
@@ -116,10 +95,10 @@ Esys_ActivateCredential(
         r = Esys_ActivateCredential_Finish(esysContext, certInfo);
         /* This is just debug information about the reattempt to finish the
            command */
-        if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
+        if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN)
             LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32
                       " => resubmitting command", r);
-    } while ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN);
+    } while (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN);
 
     /* Restore the timeout value to the original value */
     esysContext->timeout = timeouttmp;
@@ -191,11 +170,9 @@ Esys_ActivateCredential_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 1);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, activateHandle, keyHandle,
-                           credentialBlob, secret);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, activateHandle, &activateHandleNode);
@@ -217,10 +194,17 @@ Esys_ActivateCredential_Async(
     /* Calculate the cpHash Values */
     r = init_session_tab(esysContext, shandle1, shandle2, shandle3);
     return_state_if_error(r, _ESYS_STATE_INIT, "Initialize session resources");
-    iesys_compute_session_value(esysContext->session_tab[0],
-                &activateHandleNode->rsrc.name, &activateHandleNode->auth);
-    iesys_compute_session_value(esysContext->session_tab[1],
-                &keyHandleNode->rsrc.name, &keyHandleNode->auth);
+    if (activateHandleNode != NULL)
+        iesys_compute_session_value(esysContext->session_tab[0],
+                    &activateHandleNode->rsrc.name, &activateHandleNode->auth);
+    else
+        iesys_compute_session_value(esysContext->session_tab[0], NULL, NULL);
+
+    if (keyHandleNode != NULL)
+        iesys_compute_session_value(esysContext->session_tab[1],
+                    &keyHandleNode->rsrc.name, &keyHandleNode->auth);
+    else
+        iesys_compute_session_value(esysContext->session_tab[1], NULL, NULL);
     iesys_compute_session_value(esysContext->session_tab[2], NULL, NULL);
 
     /* Generate the auth values and set them in the SAPI command buffer */
@@ -229,8 +213,10 @@ Esys_ActivateCredential_Async(
                           "Error in computation of auth values");
 
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
@@ -286,7 +272,8 @@ Esys_ActivateCredential_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -302,7 +289,7 @@ Esys_ActivateCredential_Finish(
 
     /*Receive the TPM response and handle resubmissions if necessary. */
     r = Tss2_Sys_ExecuteFinish(esysContext->sys, esysContext->timeout);
-    if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
+    if (base_rc(r) == TSS2_BASE_RC_TRY_AGAIN) {
         LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32, r);
         esysContext->state = _ESYS_STATE_SENT;
         goto error_cleanup;
@@ -312,20 +299,13 @@ Esys_ActivateCredential_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             goto error_cleanup;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_ActivateCredential_Async(esysContext,
-                                          esysContext->in.ActivateCredential.activateHandle,
-                                          esysContext->in.ActivateCredential.keyHandle,
-                                          esysContext->session_type[0],
-                                          esysContext->session_type[1],
-                                          esysContext->session_type[2],
-                                          esysContext->in.ActivateCredential.credentialBlob,
-                                          esysContext->in.ActivateCredential.secret);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent

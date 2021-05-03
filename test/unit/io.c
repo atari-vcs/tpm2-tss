@@ -1,12 +1,17 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include <setjmp.h>
 #include <cmocka.h>
@@ -46,7 +51,10 @@ __wrap_read (int fd, void *buffer, size_t count)
 {
     LOG_DEBUG ("%s: reading %zu bytes from fd: %d to buffer at 0x%" PRIxPTR,
                __func__, count, fd, (uintptr_t)buffer);
-    return mock_type (ssize_t);
+    int r = mock_type (ssize_t);
+    if (r > 0)
+        memset(buffer, 0x66, r);
+    return r;
 }
 
 ssize_t
@@ -97,10 +105,11 @@ static void
 read_all_twice_eof (void **state)
 {
     ssize_t ret;
+    uint8_t buf [10];
 
     will_return (__wrap_read, 5);
     will_return (__wrap_read, 0);
-    ret = read_all (10, NULL, 10);
+    ret = read_all (10, buf, 10);
     assert_int_equal (ret, 5);
 }
 /* When passed all NULL values ensure that we get back the expected RC. */

@@ -1,15 +1,18 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2015 - 2018 Intel Corporation
  * All rights reserved.
  */
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 #ifndef _WIN32
 #include <sys/time.h>
@@ -27,18 +30,17 @@
 
 /*
  * This function wraps the "up-cast" of the opaque TCTI context type to the
- * type for the mssim TCTI context. The only safeguard we have to ensure this
- * operation is possible is the magic number in the mssim TCTI context.
- * If passed a NULL context, or the magic number check fails, this function
- * will return NULL.
+ * type for the mssim TCTI context. If passed a NULL context the function
+ * returns a NULL ptr. The function doesn't check magic number anymore
+ * It should checked by the appropriate tcti_common_checks.
  */
 TSS2_TCTI_MSSIM_CONTEXT*
 tcti_mssim_context_cast (TSS2_TCTI_CONTEXT *tcti_ctx)
 {
-    if (tcti_ctx != NULL && TSS2_TCTI_MAGIC (tcti_ctx) == TCTI_MSSIM_MAGIC) {
-        return (TSS2_TCTI_MSSIM_CONTEXT*)tcti_ctx;
-    }
-    return NULL;
+    if (tcti_ctx == NULL)
+        return NULL;
+
+    return (TSS2_TCTI_MSSIM_CONTEXT*)tcti_ctx;
 }
 /*
  * This function down-casts the mssim TCTI context to the common context
@@ -68,8 +70,13 @@ TSS2_RC tcti_platform_command (
     ssize_t read_ret;
 
     if (tcti_mssim == NULL) {
+        return TSS2_TCTI_RC_BAD_REFERENCE;
+    }
+
+    if (TSS2_TCTI_MAGIC (tcti_mssim) != TCTI_MSSIM_MAGIC) {
         return TSS2_TCTI_RC_BAD_CONTEXT;
     }
+
     rc = Tss2_MU_UINT32_Marshal (cmd, buf, sizeof (cmd), NULL);
     if (rc != TSS2_RC_SUCCESS) {
         LOG_ERROR ("Failed to marshal platform command %" PRIu32 ", rc: 0x%"
@@ -187,10 +194,7 @@ tcti_mssim_transmit (
     tpm_header_t header;
     TSS2_RC rc;
 
-    if (tcti_mssim == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-    rc = tcti_common_transmit_checks (tcti_common, cmd_buf);
+    rc = tcti_common_transmit_checks (tcti_common, cmd_buf, TCTI_MSSIM_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
@@ -228,10 +232,7 @@ tcti_mssim_cancel (
     TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_mssim_down_cast (tcti_mssim);
     TSS2_RC rc;
 
-    if (tcti_mssim == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-    rc = tcti_common_cancel_checks (tcti_common);
+    rc = tcti_common_cancel_checks (tcti_common, TCTI_MSSIM_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
@@ -255,10 +256,7 @@ tcti_mssim_set_locality (
     TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_mssim_down_cast (tcti_mssim);
     TSS2_RC rc;
 
-    if (tcti_mssim == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-    rc = tcti_common_set_locality_checks (tcti_common);
+    rc = tcti_common_set_locality_checks (tcti_common, TCTI_MSSIM_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
@@ -301,24 +299,35 @@ tcti_mssim_receive (
     unsigned char *response_buffer,
     int32_t timeout)
 {
+#ifdef TEST_FAPI_ASYNC
+    /* Used for simulating a timeout. */
+    static int wait = 0;
+#endif
     TSS2_TCTI_MSSIM_CONTEXT *tcti_mssim = tcti_mssim_context_cast (tctiContext);
     TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_mssim_down_cast (tcti_mssim);
     TSS2_RC rc;
     UINT32 trash;
     int ret;
 
-    if (tcti_mssim == NULL) {
-        return TSS2_TCTI_RC_BAD_CONTEXT;
-    }
-    rc = tcti_common_receive_checks (tcti_common, response_size);
+    rc = tcti_common_receive_checks (tcti_common,
+                                     response_size,
+                                     TCTI_MSSIM_MAGIC);
     if (rc != TSS2_RC_SUCCESS) {
         return rc;
     }
 
     if (timeout != TSS2_TCTI_TIMEOUT_BLOCK) {
-        LOG_WARNING ("Asynchronous I/O not implemented. The 'timeout' "
-                     "parameter must be TSS2_TCTI_TIMEOUT_BLOCK.");
-        return TSS2_TCTI_RC_BAD_VALUE;
+        LOG_TRACE("Asynchronous I/O not actually implemented.");
+#ifdef TEST_FAPI_ASYNC
+        if (wait < 1) {
+            LOG_TRACE("Simulating Async by requesting another invocation.");
+            wait += 1;
+            return TSS2_TCTI_RC_TRY_AGAIN;
+        } else {
+            LOG_TRACE("Sending the actual result.");
+            wait = 0;
+        }
+#endif /* TEST_FAPI_ASYNC */
     }
 
     if (tcti_common->header.size == 0) {
@@ -343,15 +352,17 @@ tcti_mssim_receive (
         LOG_DEBUG ("response size: %" PRIu32, tcti_common->header.size);
     }
 
-    *response_size = tcti_common->header.size;
     if (response_buffer == NULL) {
+        *response_size = tcti_common->header.size;
         return TSS2_RC_SUCCESS;
     }
 
     if (*response_size < tcti_common->header.size) {
         *response_size = tcti_common->header.size;
+        LOG_ERROR("Response size to big: %zu > %u", *response_size, tcti_common->header.size);
         return TSS2_TCTI_RC_INSUFFICIENT_BUFFER;
     }
+    *response_size = tcti_common->header.size;
 
     /* Receive the TPM response. */
     LOG_DEBUG ("Reading response of size %" PRIu32, tcti_common->header.size);
@@ -486,7 +497,7 @@ tcti_mssim_init_context_data (
     TSS2_TCTI_SET_LOCALITY (tcti_common) = tcti_mssim_set_locality;
     TSS2_TCTI_MAKE_STICKY (tcti_common) = tcti_make_sticky_not_implemented;
     tcti_common->state = TCTI_STATE_TRANSMIT;
-    tcti_common->locality = 3;
+    tcti_common->locality = 0;
     memset (&tcti_common->header, 0, sizeof (tcti_common->header));
 }
 /*
@@ -505,13 +516,14 @@ Tss2_Tcti_Mssim_Init (
     char *conf_copy = NULL;
     mssim_conf_t mssim_conf = MSSIM_CONF_DEFAULT_INIT;
 
-    if (conf == NULL)
+    if (conf == NULL) {
         LOG_TRACE ("tctiContext: 0x%" PRIxPTR ", size: 0x%" PRIxPTR ""
                    " default configuration will be used.",
                    (uintptr_t)tctiContext, (uintptr_t)size);
-    else
+    } else {
         LOG_TRACE ("tctiContext: 0x%" PRIxPTR ", size: 0x%" PRIxPTR ", conf: %s",
                    (uintptr_t)tctiContext, (uintptr_t)size, conf);
+    }
     if (size == NULL) {
         return TSS2_TCTI_RC_BAD_VALUE;
     }

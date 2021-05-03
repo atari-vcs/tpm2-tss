@@ -3,6 +3,268 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 
+## [3.0.3] - 2020-11-25
+### Changed or Fixed
+- Fix Regression in Fapi_List
+- Fix memory leak in policy calculation
+
+## [3.0.2] - 2020-11-20
+### Changed or Fixed
+- FAPI: Fix setting of the system flag of NV objects
+  This will let NV object metadata be created system-wide always instead of
+  locally in the user. Existing metadata will remain in the user directory.
+  It can be moved to the corresponding systemstore manually if needed.
+- FAPI: Fix policy searching, when a policyRef was provided
+- FAPI: Accept EK-Certs without CRL dist point
+- FAPI: Fix return codes of Fapi_List
+- FAPI: Fix memleak in policy execution
+- FAPI: Fix coverity NULL-pointer check
+- FAPI: Set the written flag of NV objects in FAPI PolicyNV commands
+- FAPI: Fix deleting of policy files.
+- FAPI: Fix wrong file loading during object search.
+- Fapi: Fix memory leak
+- Fapi: Fix potential NULL-Dereference
+- Fapi: Remove superfluous NULL check
+- Fix a memory leak in async keystore load.
+
+## [3.0.1] - 2020-09-23
+### Changed or Fixed
+- Fix CVE-2020-24455 FAPI PolicyPCR not instatiating correctly
+  Note that all TPM object created with a PolicyPCR with the currentPcrs
+  and currentPcrsAndBank options have been created with an incorrect policy
+  that ommits PCR checks. All these objects have to be recreated!
+- Fix bug in FAPI NV creation with custom index values
+- Cleanup of leftover sessions in error cases in FAPI
+- Better error messages in several FAPI errors
+- Add checks to FAPI policy paths
+- Add checks if FAPI is correctly provisioned
+- Fix execution of FAPI policies in some cases
+- Allow 0x prefixes for TPMU_HA in JSON encoding
+
+## [3.0.0] - 2020-08-05
+### Changed or Fixed
+- Added setgid perms and ACL for FAPI keystore to allow r/w access for tss group
+- Fixed duoble json_object_put call in event log processing.
+- Added TSS root dir to include path in CFLAGS
+- Switch default FAPI profile to ECC.
+- Enabled all PCR registers for SHA256 bank in the distribution profiles.
+- Added fix computation of PCR logs and PCR digest of PCR logs.
+- Added fix size check for Fapi_Encrypt.
+- Improved log messages in FAPI
+- Introduced new FAPI return codes FAPI_RC_ALREADY_PROVISIONED,
+  TSS2_BASE_RC_NOT_PROVISIONED, and TSS2_FAPI_RC_NOT_PROVISIONED.
+- Added missing retry in Fapi_Initialize_Finish.
+- Added man pages for FAPI config files
+- Deleted invalid keys from the null hierarchy.
+- Fixed check of auth state for lockout set.
+- Fixed check of directory access rights in Fapi_Initialize.
+- Enabled usage of NULL hierarchy in FAPI.
+- Added address sanitizer to CI for gcc.
+- Added asserts to callback functions in integration tests
+- Added check event log file before Fapi_PcrExtend.
+- Fixed hierarchy usage and authentication in Fapi_Provision,
+  Fapi_GetCertificate, and Fapi_Delete.
+- Added description for primary keys to profile.
+- Fixed non async call of Esys_ContextSave in Fapi_GetEsysBlobs.
+- Added check for hierarchy needed for EvictControl for deleting objects.
+- Fixed copying the primary during key loading.
+- Added a check that prevents deleting of default directories.
+- Added verification to provisioning.
+- Fixed usage of persistent handles.
+- Added missing selectors for some TPMU types in marshal
+- Added handling for invalid selector when (um)marshal TPMU types
+- Improved presentation of Fapi_GetInfo.
+- Fixed computation of the size of a PCR selection.
+- Added a check for valid pathnames in keystore module.
+- Added a check for deleting of the SRK.
+- Fixed computation of random value for objects used for sealing.
+- Fixed return code for event parsing errors.
+- Added content of the config file to FAPI Info.
+- Fixed NV index and path handling in NV creation.
+- Fixed path checking for keys.
+- Fixed version retrieval method in Fapi_GetInfo.
+- Fixed path usage in Fapi_Import.
+- Fixed settings of default flags for keys creation.
+- Fixed handle usage in Fapi_ChangeAuth
+- Fixed systemd-sysusers/-tmpfiles invocation
+- Changed FAPI callback API.
+- Fixed initialization of app data in Esys_Initialize
+- Fixed certificate handling for TPMs without stored certificate.
+- Replaced strtok with strtok_r
+- Changed return codes from tcti macros according to the spec
+- Added check that prevents overwriting objects in key store.
+- Added session usage to FAPI provisioning.
+- Enabled CI for FreeBSD
+- Changed hierarchy param type of Esys_Hash(), Esys_HierarchyControl(),
+  Esys_LoadExternal(), and Esys_SequenceComplete() calls along with
+  their Async versions according to the spec.
+  The can accept both types TPM2_RH and ESYS_TRs as then don't collide.
+- Changed Tss2_Sys_ReadClock to allow audit session to be consistent
+  with the rev 1.38 version of the TPM2.0 architecture spec.
+  Note: This change brakes ABI backwards compatibility.
+- Silenced expected errors from Esys_TestParams.
+- Many improvements for CI builds on Travis and Cirrus, unit tests
+  and integration test code
+
+### Added
+- Added SWTPM-TCTI
+- Added mbedTLS ESYS crypto backend
+- Added the Command TCTI
+- Added new API function Fapi_GetEsysBlobs.
+- Added new feature for importing keys with Fapi_Import.
+
+### Removed
+- Removed libgcrypt ESYS crypto backend
+- Removed dev-tcti partial read mode configuration flag
+- Removed dev-tcti async mode configuration flag
+- Removed obsolete LIBDL_LDFLAGS and replaced broken @LIBDL_LDFLAGS@ with @LIBADD_DL@
+- Removed deprecated OpenSSL functions from FAPI and ESYS
+
+## [2.4.0] - 2020-03-11
+### Added
+- Added a new Feature API (FAPI) implementation
+- Added Esys_TRSess_GetAuthRequired() ESAPI function
+- Added Esys_TR_GetTpmHandle() SAPI function
+- Added Esys_GetSysContext() SAPI function
+- Added the with-sanitizer configure option
+- Added CI for FreeBSD
+- Added tcti-cmd
+
+### Changed
+- Changed MSSIM TCTI to be async capable
+- Removed TCTI loaders from ESYS dependencies in pkg-config
+- Changed getPollHandles to allow num_handles query
+- Improved CI builds
+- Converted builds to docker builds
+- Number of fixes and improvements in the test code
+- Changed tcti-device in non-async mode to allways block
+
+### Fixed
+- Fixed hmac calculation for tpm2_clear command in ESAPI
+- Fixed mixing salted and unsalted sessions in the same ESAPI context
+- Removed use of VLAs from TPML marshal code
+- Fixed setting C++ compiler for non-fuzzing builds at configure
+- Fixed setting the name of session objects
+- Fixed page alignment errors in Sys_Get/SetAuths functions
+- Fixed potential buffer overflow in tcti_mssim_receive
+- Fixed invalid memory alloc failure in Tss2_TctiLdr_Initialize
+- Fixed list of exported symbols map for libtss2-mu
+- Fixed resource name calculation in Esys_CreateLoaded
+- Fixed keysize of ECC curve TPM2_ECC_NISTP224
+- Fixed segmentation fault in tctildr if name_conf was too big
+- Fixed memory leak in tctildr-tcti tests
+- Fixed HMAC generation for policy sessions
+- Added check for object node before calling compute_session_value function
+- Fixed auth calculation in Esys_StartAuthSession called with optional parameters
+- Fixed compute_encrypted_salt error handling in Esys_StartAuthSession
+- Fixed exported symbols map for libtss2-mu
+
+### Removed
+- Remove duplicate ESYS entries from map file
+- Removed the private implementation of strndup from tctildr
+
+## [2.3.0] - 2019-08-13
+### Added
+- tss2-tctildr: A new library that helps with tcti initialization
+  Recommend to use this in place of custom tcti loading code now !
+- tss2-rc: A new library that provides textual representations for return codes
+- Added release and maintainance info (~3 per year and latest 2 are supported)
+- Support for building on VxWorks.
+- Option to disable NIST-deprecated crypto (--disable-weak-crypto)
+- Support Esys_TR_FromTPMPublic on sessions (for use in Esys_FlushContext)
+- Better Windows/VS Support
+- Fuzz-Testing and Valgrind-Testing
+- map-files with correct symbol lists for tss2-sys and tss2-esys
+  This may lead to unresolved symbols in linked applications
+
+### Changed
+- Several further minor fixes and cleanups
+- Support to call Tss2_Sys_Execute repeatedly on certain errors
+- Reduced RAM consumption in Esys due to Tss2_Sys_Execute change
+- Automated session attribution clearing for esys (decrypt and encrypt) per cmd
+- Switched to git.mk, many ax_ makros and away from gnulib
+- Switched to config.h and autoheaders
+
+### Removed
+- Removed libtss2-mu from "Requires" field of libtss2-esys.pc
+  Needs to be added explicitely now
+
+### Fixed
+- All fixes from 2.2.1, 2.2.2 and 2.2.3
+- SPDX License Identifiers
+- Null-pointer problems in tcti-tbs
+- Default locality for tcti-mssim set to LOC_0
+- coverity and valgrind leaks detected in test programs (not library code)
+
+## [2.2.3] - 2019-05-28
+### Fixed
+ - Fix computation of session name
+ - Fixed PolicyPassword handling of session Attributes
+ - Fixed windows build from dist ball
+ - Fixed default tcti configure option
+ - Fixed nonce size calculation in ESYS sessions
+
+## [2.2.2] - 2019-03-28
+### Fixed
+ - Fixed wrong encryption flag in EncryptDecrypt
+ - Fixing openssl engine invocation
+
+## [2.2.1] - 2019-02-28
+### Fixed
+ - Forced RAND_bytes method to software implementation to avoid session spoofing
+ - Fixed OpenSSL symbolic naming conflict
+ - Fixed leaks of local point variables and BN_ctx
+ - Fixed memory leaks related to using regular free on gcrypt allocated objects
+ - Fixed leak of rsa->n in iesys_cryptossl_pk_encrypt
+ - Fixed memory leaks in iesys_cryptossl_pk_encrypt
+ - Fixed possible NULL dereference of big number
+
+## [2.2.0] - 2019-02-04
+### Fixed
+- Fixed leak of hkey on success in iesys_cryptossl_hmac_start
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
+
+### Added
+- Added support for QNX build
+- Added support for partial reads in device TCTI
+
+## [2.1.1] - 2019-02-04
+### Fixed
+- Fixed leak of hkey on success in iesys_cryptossl_hmac_start
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
+
 ## [2.1.0]
 ### Fixed
 - Fixed handling of the default TCTI
@@ -25,6 +287,26 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 ### Changed
 - Refactored SetDecryptParam
 - Enabled OpenSSL crypto backend by default
+
+## [2.0.2] - 2019-02-04
+### Fixed
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
 
 ## [2.0.1] - 2018-08-10
 ### Fixed

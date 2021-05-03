@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,6 +15,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test RSA encryption / decryption.
  *  with password
@@ -19,7 +24,7 @@
  * This key will be used for encryption/decryption in with the schemes:
  * TPM2_ALG_NULL, TPM2_ALG_RSAES, and TPM2_ALG_OAEP
  *
- * Tested ESAPI commands:
+ * Tested ESYS commands:
  *  - Esys_CreatePrimary() (M)
  *  - Esys_FlushContext() (M)
  *  - Esys_RSA_Decrypt() (M)
@@ -36,13 +41,21 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR primaryHandle = ESYS_TR_NONE;
 
+    TPM2B_PUBLIC *outPublic = NULL;
+    TPM2B_CREATION_DATA *creationData = NULL;
+    TPM2B_DIGEST *creationHash = NULL;
+    TPMT_TK_CREATION *creationTicket = NULL;
+    TPM2B_PUBLIC_KEY_RSA *cipher = NULL;
+    TPM2B_PUBLIC_KEY_RSA *plain2 = NULL;
+    TPM2B_DATA * null_data = NULL;
+
     TPM2B_AUTH authValuePrimary = {
         .size = 5,
         .buffer = {1, 2, 3, 4, 5}
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -104,10 +117,6 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: TR_SetAuth", error);
 
     RSRC_NODE_T *primaryHandle_node;
-    TPM2B_PUBLIC *outPublic;
-    TPM2B_CREATION_DATA *creationData;
-    TPM2B_DIGEST *creationHash;
-    TPMT_TK_CREATION *creationTicket;
 
     for (int mode = 0; mode <= 2; mode++) {
 
@@ -130,6 +139,10 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
                                &primaryHandle, &outPublic, &creationData,
                                &creationHash, &creationTicket);
         goto_if_error(r, "Error esys create primary", error);
+        Esys_Free(outPublic);
+        Esys_Free(creationData);
+        Esys_Free(creationHash);
+        Esys_Free(creationTicket);
 
         r = esys_GetResourceObject(esys_context, primaryHandle,
                                    &primaryHandle_node);
@@ -146,9 +159,6 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
         TPM2B_PUBLIC_KEY_RSA plain = {.size = plain_size,.buffer = {1, 2, 3}
         };
         TPMT_RSA_DECRYPT scheme;
-        TPM2B_DATA null_data = {.size = 0,.buffer = {}
-        };
-        TPM2B_PUBLIC_KEY_RSA *cipher;
 
         if (mode == 0) {
             scheme.scheme = TPM2_ALG_NULL;
@@ -160,14 +170,18 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
         }
         r = Esys_RSA_Encrypt(esys_context, primaryHandle, ESYS_TR_NONE,
                              ESYS_TR_NONE, ESYS_TR_NONE, &plain, &scheme,
-                             &null_data, &cipher);
+                             null_data, &cipher);
         goto_if_error(r, "Error esys rsa encrypt", error);
 
-        TPM2B_PUBLIC_KEY_RSA *plain2;
+        Esys_Free(null_data);
+
         r = Esys_RSA_Decrypt(esys_context, primaryHandle,
                              ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
-                             cipher, &scheme, &null_data, &plain2);
+                             cipher, &scheme, null_data, &plain2);
         goto_if_error(r, "Error esys rsa decrypt", error);
+
+        Esys_Free(null_data);
+        Esys_Free(cipher);
 
         if (mode > 0 && memcmp(&plain.buffer[0], &plain2->buffer[0], plain_size)) {
             LOG_ERROR("plain texts are not equal for mode %i", mode);
@@ -176,7 +190,9 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
 
         r = Esys_FlushContext(esys_context, primaryHandle);
         goto_if_error(r, "Error: FlushContext", error);
+        Esys_Free(plain2);
     }
+
     return EXIT_SUCCESS;
 
  error:
@@ -187,10 +203,17 @@ test_esys_rsa_encrypt_decrypt(ESYS_CONTEXT * esys_context)
         }
     }
 
+    Esys_Free(outPublic);
+    Esys_Free(creationData);
+    Esys_Free(creationHash);
+    Esys_Free(creationTicket);
+    Esys_Free(cipher);
+    Esys_Free(plain2);
+    Esys_Free(null_data);
     return EXIT_FAILURE;
 }
 
 int
-test_invoke_esapi(ESYS_CONTEXT * esys_context) {
+test_invoke_esys(ESYS_CONTEXT * esys_context) {
     return test_esys_rsa_encrypt_decrypt(esys_context);
 }

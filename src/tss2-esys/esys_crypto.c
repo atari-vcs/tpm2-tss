@@ -1,10 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdio.h>
 
@@ -13,8 +15,9 @@
 #include "esys_crypto.h"
 #include "esys_iutil.h"
 #include "esys_mu.h"
-#define LOGMODULE esys
+#define LOGMODULE esys_crypto
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Provide the digest size for a given hash algorithm.
  *

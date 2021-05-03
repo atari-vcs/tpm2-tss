@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdarg.h>
 #include <inttypes.h>
@@ -31,7 +35,7 @@ check_hash_functions(void **state)
     uint8_t buffer[10] = { 0 };
     TPM2B tpm2b;
     size_t size = 0;
-    
+
     rc = iesys_crypto_hash_start(NULL, TPM2_ALG_SHA384);
     assert_int_equal (rc, TSS2_ESYS_RC_BAD_REFERENCE);
 
@@ -72,7 +76,10 @@ check_hash_functions(void **state)
 
     rc = iesys_crypto_hash_finish(&context, &buffer[0], &size);
     assert_int_equal (rc, TSS2_ESYS_RC_BAD_REFERENCE);
-} 
+
+    /* cleanup */
+    iesys_crypto_hmac_abort(&context);
+}
 
 static void
 check_hmac_functions(void **state)
@@ -82,7 +89,7 @@ check_hmac_functions(void **state)
     uint8_t buffer[10] = { 0 };
     TPM2B tpm2b;
     size_t size = 0;
-    
+
     rc = iesys_crypto_hmac_start(NULL, TPM2_ALG_SHA384, &buffer[0], 10);
     assert_int_equal (rc, TSS2_ESYS_RC_BAD_REFERENCE);
 
@@ -126,6 +133,9 @@ check_hmac_functions(void **state)
 
     rc = iesys_crypto_hmac_finish(&context, &buffer[0], &size);
     assert_int_equal (rc, TSS2_ESYS_RC_BAD_REFERENCE);
+
+    /* cleanup */
+    iesys_crypto_hash_abort(&context);
 }
 
 static void
@@ -136,7 +146,7 @@ check_random(void **state)
     TPM2B_NONCE nonce;
     rc = iesys_crypto_random2b(&nonce, num_bytes);
     assert_int_equal (rc, TSS2_RC_SUCCESS);
-} 
+}
 
 static void
 check_pk_encrypt(void **state)
@@ -179,7 +189,7 @@ check_pk_encrypt(void **state)
              }
         }
     };
-   
+
     inPublicRSA.publicArea.nameAlg = 0;
     rc = iesys_crypto_pk_encrypt(&inPublicRSA, size, &in_buffer[0], size, &out_buffer[0], &size, "LABEL");
     assert_int_equal (rc, TSS2_ESYS_RC_NOT_IMPLEMENTED);
@@ -202,7 +212,7 @@ check_aes_encrypt(void **state)
     rc = iesys_crypto_sym_aes_encrypt(NULL, TPM2_ALG_AES, 192, TPM2_ALG_CFB, 16,
                                       &buffer[0], size, &key[0]);
     assert_int_equal (rc, TSS2_ESYS_RC_BAD_REFERENCE);
-    
+
     rc = iesys_crypto_sym_aes_encrypt(&key[0], TPM2_ALG_AES, 192, TPM2_ALG_CFB, 16,
                                       &buffer[0], size, &key[0]);
     assert_int_equal (rc, TSS2_RC_SUCCESS);
@@ -240,7 +250,30 @@ check_free(void **state)
     Esys_Free(buffer);
 }
 
+static void
+check_get_sys_context(void **state)
+{
+    ESYS_CONTEXT *ctx;
+    TSS2_TCTI_CONTEXT_COMMON_V1 tcti = {0};
+    TSS2_SYS_CONTEXT *sys_ctx = NULL;
+    TSS2_RC rc;
 
+    rc = Esys_GetSysContext(NULL, NULL);
+    assert_int_equal(rc, TSS2_ESYS_RC_BAD_REFERENCE);
+
+    tcti.version = 1;
+    tcti.transmit = (void*) 0xdeadbeef;
+    tcti.receive = (void*) 0xdeadbeef;
+
+    rc = Esys_Initialize(&ctx, (TSS2_TCTI_CONTEXT *) &tcti, NULL);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    rc = Esys_GetSysContext(ctx, &sys_ctx);
+    assert_ptr_not_equal(sys_ctx, NULL);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    Esys_Finalize(&ctx);
+}
 
 int
 main(int argc, char *argv[])
@@ -252,6 +285,7 @@ main(int argc, char *argv[])
         cmocka_unit_test(check_pk_encrypt),
         cmocka_unit_test(check_aes_encrypt),
         cmocka_unit_test(check_free),
+        cmocka_unit_test(check_get_sys_context),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
